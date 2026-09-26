@@ -1,0 +1,37 @@
+# ---- build output -------------------------------------------------------
+# The binary, with or without a Windows .exe suffix, and stray build leftovers.
+# Matching both names matters: Go appends .exe on Windows, and a stale `dirserve`
+# from a Linux/WSL build can sit next to it.
+/dirserve
+/dirserve.exe
+*.exe
+*.exe~
+*~
+
+# ---- coverage / test output ---------------------------------------------
+*.out
+*.test
+coverage.*
+
+# ---- local data served by the container ----------------------------------
+# The compose stack mounts a host directory here; it is user data, never source.
+/data
+/data/
+
+# ---- editor / OS noise --------------------------------------------------
+.vscode/
+.idea/
+*.swp
+*.swo
+.DS_Store
+Thumbs.db
+desktop.ini
+
+# ---- local overrides ----------------------------------------------------
+# Real .env files hold the serve token; the committed example does not.
+.env
+.env.local
+docker-compose.override.yml
+
+# Local build spec, not part of the published project
+/DIRSERVE.md

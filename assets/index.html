@@ -1,0 +1,86 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="robots" content="noindex, nofollow">
+<title>dirserve — {{if .Path}}{{.Path}}{{else}}root{{end}}</title>
+<link rel="icon" href="/favicon.svg" type="image/svg+xml">
+<link rel="stylesheet" href="/style.css">
+<body data-max-preview="{{.MaxPreview}}">
+
+<div class="app">
+  <header class="topbar">
+    <div class="brand">
+      <span class="mark" aria-hidden="true">
+        <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round">
+          <path d="M2 4.5A1.5 1.5 0 0 1 3.5 3h3l1.4 1.6h4.6A1.5 1.5 0 0 1 14 6.1v5.4A1.5 1.5 0 0 1 12.5 13h-9A1.5 1.5 0 0 1 2 11.5z"/>
+        </svg>
+      </span>
+      <span>dirserve</span>
+    </div>
+    <span class="readonly" title="This server can only read">read-only</span>
+    <div class="root" title="Served directory">
+      <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+        <path d="M2.5 4.2A1.2 1.2 0 0 1 3.7 3h2.6l1.2 1.4h4.8a1.2 1.2 0 0 1 1.2 1.2v6.2a1.2 1.2 0 0 1-1.2 1.2H3.7a1.2 1.2 0 0 1-1.2-1.2z"/>
+      </svg>
+      <span id="root-path">{{.Root}}</span>
+    </div>
+  </header>
+
+  <div class="body">
+    <nav class="sidebar" aria-label="File tree">
+      <div class="filterbar">
+        <label class="filter">
+          <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" aria-hidden="true">
+            <circle cx="7" cy="7" r="4.2"/><path d="m10.2 10.2 3 3"/>
+          </svg>
+          <input id="filter" type="search" placeholder="Filter files" autocomplete="off" spellcheck="false" aria-label="Filter files">
+          <kbd>/</kbd>
+        </label>
+      </div>
+      <div class="tree" id="tree" role="tree" aria-label="Files" tabindex="0">
+        <noscript>
+          <div class="noscript">
+            {{if .HasParent}}<p class="up"><a href="{{.ParentHref}}">↑ parent directory</a></p>{{end}}
+            {{if .Entries}}<ul class="plain">
+              {{- range .Entries}}
+              <li>
+                <a href="{{.Href}}">{{if .Dir}}{{.Name}}/{{else}}{{.Name}}{{end}}</a>
+                {{- if not .Dir}} <span class="num">{{.Size}}</span> <span class="num">{{.Time}}</span>{{end}}
+              </li>
+              {{- end}}
+            </ul>
+            {{else}}<p class="hint">This directory is empty.</p>{{end}}
+            {{if .Truncated}}<p class="hint">Listing truncated at 5,000 entries.</p>{{end}}
+          </div>
+        </noscript>
+      </div>
+    </nav>
+
+    <main class="main">
+      <div class="head" id="head" hidden>
+        <div class="who">
+          <div class="crumb" id="crumb"></div>
+          <div class="meta" id="meta"></div>
+        </div>
+        <div class="actions" id="actions"></div>
+      </div>
+      <div class="pane" id="pane">
+        <div class="blank" id="blank">
+          <div class="glyph" aria-hidden="true">
+            <svg viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
+              <path d="M3 5.2A1.2 1.2 0 0 1 4.2 4h3l1.3 1.5h7.3A1.2 1.2 0 0 1 17 6.7v7.1A1.2 1.2 0 0 1 15.8 15H4.2A1.2 1.2 0 0 1 3 13.8z"/>
+            </svg>
+          </div>
+          <h2>Read-only, by design</h2>
+          <p>Select a file to preview it here, or take the whole tree from a shell:</p>
+          <p><code>curl -fsSL {{.Root}}…</code></p>
+        </div>
+      </div>
+    </main>
+  </div>
+</div>
+<script src="/app.js" defer></script>
+</body>
+</html>

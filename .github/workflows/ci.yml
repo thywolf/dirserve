@@ -1,0 +1,196 @@
+name: ci
+
+# Verify every push and pull request, and publish the container image on tags
+# and on the default branch.
+#
+# The `test` job is the gate: a broken build, a failing test, a vet error, or a
+# dirty gofmt tree never reaches the `publish` job, so `latest` cannot point at a
+# non-working image.
+
+on:
+  push:
+    branches: [main]
+    tags: ["v*"]
+  pull_request:
+    branches: [main]
+  workflow_dispatch:
+
+# Cancel superseded runs on the same ref; never cancel a tag or a release.
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: ${{ github.ref == 'refs/heads/main' }}
+
+env:
+  IMAGE: ghcr.io/${{ github.repository }}
+
+permissions:
+  contents: read
+
+jobs:
+  test:
+    name: test (go ${{ matrix.go }})
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        # 1.25 is the floor because os.Root is the confinement mechanism.
+        go: ["1.25", "stable"]
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-go@v5
+        with:
+          go-version: ${{ matrix.go }}
+          check-latest: true
+
+      - name: Cache modules and build cache
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cache/go-build
+            ~/go/pkg/mod
+          key: ${{ runner.os }}-go-${{ matrix.go }}-${{ hashFiles('**/go.sum') }}
+          restore-keys: ${{ runner.os }}-go-${{ matrix.go }}-
+
+      - name: gofmt must be clean
+        run: |
+          unformatted="$(gofmt -l .)"
+          if [ -n "$unformatted" ]; then
+            echo "::error::These files are not gofmt-clean:"
+            echo "$unformatted"
+            exit 1
+          fi
+
+      - name: go vet
+        run: go vet ./...
+
+      # The module has no third-party dependencies, so this works with no
+      # network access to a proxy after checkout.
+      - name: Build
+        run: CGO_ENABLED=0 go build -trimpath -o dirserve ./cmd/dirserve
+
+      - name: Unit and integration tests
+        run: go test -race -covermode=atomic -coverprofile=coverage.out ./...
+
+      - name: Test coverage
+        run: |
+          go tool cover -func=coverage.out | tail -1
+          # Fail if total coverage falls below this line.
+          total="$(go tool cover -func=coverage.out | awk '/^total:/ {print $3}' | tr -d '%')"
+          awk -v t="$total" 'BEGIN { if (t + 0 < 60) { printf "::error::coverage %.1f%% is below the 60%% floor\n", t; exit 1 } }'
+
+      - name: End-to-end acceptance
+        run: ./e2e.sh
+
+      - name: Upload coverage
+        if: matrix.go == 'stable'
+        uses: actions/upload-artifact@v4
+        with:
+          name: coverage
+          path: coverage.out
+          retention-days: 7
+
+  docker:
+    name: build and publish image
+    runs-on: ubuntu-latest
+    needs: test
+    # Tags are only published once the tests for that ref have passed.
+    permissions:
+      contents: read
+      packages: write
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: docker/setup-buildx-action@v3
+
+      - name: Log in to GitHub Container Registry
+        if: github.event_name != 'pull_request'
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Derive image tags
+        id: meta
+        if: github.event_name != 'pull_request'
+        uses: docker/metadata-action@v5
+        with:
+          images: ${{ env.IMAGE }}
+          tags: |
+            type=ref,event=tag
+            type=sha,prefix=sha-
+            type=raw,value=latest,enable={{is_default_branch}}
+
+      - name: Build and push
+        if: github.event_name != 'pull_request'
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          push: true
+          # Provenance + SBOM, and the size is asserted below.
+          provenance: mode=max
+          sbom: true
+          tags: ${{ steps.meta.outputs.tags }}
+          labels: ${{ steps.meta.outputs.labels }}
+          build-args: |
+            VERSION=${{ github.ref_name }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
+      # Pull requests still get a build-only run, so the Dockerfile is proven to
+      # work before it is ever published.
+      - name: Build only (pull request)
+        if: github.event_name == 'pull_request'
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          push: false
+          load: true
+          tags: ${{ env.IMAGE }}:pr
+          cache-from: type=gha
+
+      - name: Verify the built image runs, is non-root, and stays small
+        if: github.event_name == 'pull_request'
+        shell: bash
+        run: |
+          set -euo pipefail
+          IMAGE="${{ env.IMAGE }}:pr"
+
+          # §10: the image budget is under 10 MB.
+          size_mb=$(( $(docker image inspect "$IMAGE" --format '{{.Size}}') / 1024 / 1024 ))
+          echo "image size: ${size_mb} MiB (budget < 10 MiB)"
+          [ "$size_mb" -lt 10 ] || { echo "::error::image is ${size_mb} MiB"; exit 1; }
+
+          # §10: the container must not run as root.
+          user="$(docker image inspect "$IMAGE" --format '{{.Config.User}}')"
+          echo "image user: '$user'"
+          case "$user" in
+            ""|0|root|0:0) echo "::error::image must run as non-root"; exit 1 ;;
+          esac
+
+          # The container must answer the root health check on a mounted dir.
+          serve_dir="$(mktemp -d)"
+          printf 'hello-from-container\n' > "$serve_dir/hello.txt"
+          docker run -d --name dirserve-test -p 8080:8080 \
+            -v "$serve_dir:/data:ro" "$IMAGE" >/dev/null
+
+          for _ in $(seq 1 30); do
+            if body="$(curl -fsS http://127.0.0.1:8080/ 2>/dev/null)"; then
+              case "$body" in
+                *hello.txt*) echo "root listed the mounted directory" ;;
+                *) echo "::error::root did not list the mounted file"; docker logs dirserve-test; exit 1 ;;
+              esac
+              curl -fsS http://127.0.0.1:8080/hello.txt | grep -q hello-from-container \
+                && echo "file bytes round-tripped" \
+                || { echo "::error::bytes did not round-trip"; exit 1; }
+              docker rm -f dirserve-test >/dev/null
+              exit 0
+            fi
+            sleep 1
+          done
+
+          echo "::error::container never answered on the root"
+          docker logs dirserve-test || true
+          docker rm -f dirserve-test >/dev/null || true
+          exit 1

@@ -1,0 +1,14 @@
+# Build context: only what the Dockerfile actually copies.
+.git
+.gitignore
+data
+dirserve
+e2e.sh
+Makefile
+README.md
+LICENSE
+Dockerfile
+docker-compose.yml
+docker-compose.yaml
+*.md
+*.sh

@@ -1,0 +1,56 @@
+# dirserve — read-only HTTP for one directory.
+#
+# Ready to paste into Portainer's "Stacks" editor as a Compose file. Every
+# value below is a variable with a working default, so the stack runs untouched
+# and you only need to set the ones you care about.
+#
+# In Portainer:  Stacks > Add stack > Web editor, paste this, then
+# "Environment variables" (or the stack's .env) to set DIRTO_SHARE and TOKEN.
+#
+# Docker Compose variable syntax used here:
+#   ${VAR:-default}  ->  use default when VAR is unset or empty
+
+services:
+  dirserve:
+    # Pulled from GitHub Container Registry — this stack never builds locally.
+    # The `latest` tag is replaced by a commit-pinned tag in CI (see below), so
+    # prefer pinning when you care about reproducibility.
+    image: ${IMAGE:-ghcr.io/thywolf/dirserve:latest}
+    container_name: ${CONTAINER_NAME:-dirserve}
+
+    # Host port -> container port. Change HOST_PORT to avoid a clash; leave
+    # CONTAINER_PORT alone unless you also change the container CMD below.
+    ports:
+      - "${HOST_PORT:-8080}:${CONTAINER_PORT:-8080}"
+
+    # The directory to share, as an absolute path on the Docker host.
+    # /srv/dirshare is the Portainer convention; point it at your own folder.
+    # For Windows Docker Desktop use a drive path, e.g. C:/Users/me/share.
+    volumes:
+      - "${DIRTO_SHARE:-/srv/dirshare}:/data:ro"
+
+    restart: ${RESTART_POLICY:-unless-stopped}
+
+    environment:
+      # Bearer token. If you leave it empty the server is open to anyone who can
+      # reach the published port. Set a long random value in production.
+      # Example: openssl rand -hex 32
+      DIRSERVE_TOKEN: "${TOKEN:-}"
+      # Hide dotfiles from listings and refuse to serve them.
+      DIRSERVE_HIDDEN: "${HIDE_DOTFILES:-false}"
+      # Largest file previewed inline in the web UI (bytes). Default 1 MiB.
+      DIRSERVE_MAX_PREVIEW_BYTES: "${MAX_PREVIEW_BYTES:-1048576}"
+      # Container-local listen address. Do not change without changing the
+      # exposed container port to match.
+      DIRSERVE_ADDR: "0.0.0.0:${CONTAINER_PORT:-8080}"
+
+    # The image already serves /data and binds 0.0.0.0; no command override.
+    # Uncomment only to change the served path away from /data.
+    # command: ["--root", "/data"]
+
+    # Logging: keep the container's disk footprint bounded.
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "3"

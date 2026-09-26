@@ -1,0 +1,27 @@
+# Normalize line endings in the repository, and check out the right ones per
+# platform. Without this, a Windows checkout rewrites the shell script and the
+# Dockerfile with CRLF, and e2e.sh then fails on Linux with
+# "/bin/sh^M: bad interpreter" in CI.
+
+* text=auto eol=lf
+
+# Shell scripts must stay LF everywhere: the shebang breaks with a CR.
+*.sh text eol=lf
+
+# Docker builds require LF; a CRLF Dockerfile is silently mis-parsed.
+Dockerfile text eol=lf
+*.yml text eol=lf
+*.yaml text eol=lf
+
+# Windows-only scripts keep CRLF.
+*.bat text eol=crlf
+*.cmd text eol=crlf
+*.ps1 text eol=crlf
+
+# Binary assets: never touched.
+*.png binary
+*.jpg binary
+*.gif binary
+*.ico binary
+*.woff binary
+*.woff2 binary
