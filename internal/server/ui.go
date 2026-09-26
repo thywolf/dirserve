@@ -137,6 +137,8 @@ func (s *Server) writeUI(w http.ResponseWriter, r *http.Request, rel string, ent
 	h := w.Header()
 	h.Set("Content-Type", "text/html; charset=utf-8")
 	h.Set("Content-Length", strconv.Itoa(len(body)))
+	// Same three-representations-one-URL rule as the JSON listing.
+	h.Set("Vary", "Accept")
 	h.Set("Cache-Control", "no-cache")
 	w.WriteHeader(http.StatusOK)
 	if r.Method != http.MethodHead {

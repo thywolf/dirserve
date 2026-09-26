@@ -129,6 +129,9 @@ func (s *Server) writeJSONBody(w http.ResponseWriter, r *http.Request, status in
 	h := w.Header()
 	h.Set("Content-Type", "application/json; charset=utf-8")
 	h.Set("Content-Length", strconv.Itoa(len(body)))
+	// One URL has three representations, chosen by Accept. Without Vary a
+	// shared cache would hand the HTML page to a client that asked for JSON.
+	h.Set("Vary", "Accept")
 	h.Set("Cache-Control", "no-cache")
 	w.WriteHeader(status)
 	if r.Method != http.MethodHead {
@@ -151,6 +154,8 @@ func (s *Server) writeText(w http.ResponseWriter, r *http.Request, entries []fsx
 	h := w.Header()
 	h.Set("Content-Type", "text/plain; charset=utf-8")
 	h.Set("Content-Length", strconv.Itoa(len(body)))
+	// Same three-representations-one-URL rule as the JSON listing above.
+	h.Set("Vary", "Accept")
 	h.Set("Cache-Control", "no-cache")
 	w.WriteHeader(http.StatusOK)
 	if r.Method != http.MethodHead {

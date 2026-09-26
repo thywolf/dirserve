@@ -93,7 +93,10 @@ func (s *Server) dispatch(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	rel, err := fsx.DecodePath(r.URL.Path)
+	// EscapedPath, not Path: net/http has already percent-decoded Path, and
+	// decoding it again is what used to make a file named "a%2fb.txt"
+	// unreachable and alias it onto the directory "a/b.txt".
+	rel, err := fsx.DecodePath(r.URL.EscapedPath())
 	if err != nil {
 		writeError(w, r, http.StatusBadRequest, "unsafe path")
 		return
@@ -105,7 +108,7 @@ func (s *Server) dispatch(w http.ResponseWriter, r *http.Request) {
 	info, err := s.cfg.FS.Stat(rel)
 	switch {
 	case err == nil && info.IsDir():
-		if !strings.HasSuffix(r.URL.Path, "/") {
+		if !strings.HasSuffix(r.URL.EscapedPath(), "/") {
 			// Canonicalize so the directory's own relative URLs and links
 			// resolve against the directory rather than against its parent.
 			redirectToSlash(w, r)
@@ -117,15 +120,23 @@ func (s *Server) dispatch(w http.ResponseWriter, r *http.Request) {
 	case errors.Is(err, fsx.ErrNotFound):
 		writeError(w, r, http.StatusNotFound, "not found")
 	default:
-		// The served directory was unmounted or replaced underneath us (§11):
-		// report it plainly and stay up.
-		s.cfg.Logger.Error("stat failed", "path", rel, "err", err)
+		// A path that fails to resolve because it leaves the root is a
+		// confinement event, not a missing file, and a server operator
+		// scanning for the latter should not drown in the former. A path
+		// that fails because the served directory was unmounted or replaced
+		// underneath us (§11) is worth a line, at a level that does not cry
+		// wolf on every other one.
+		s.cfg.Logger.Warn("path not resolvable", "path", rel, "err", err)
 		writeError(w, r, http.StatusNotFound, "not found")
 	}
 }
 
 func redirectToSlash(w http.ResponseWriter, r *http.Request) {
-	target := r.URL.Path + "/"
+	// EscapedPath, not Path: a directory called "dir with space" or "dir#hash"
+	// must be redirected to a URL that still says so. The decoded form used to
+	// emit "Location: /dir with space/", which a client cannot resolve, and
+	// "Location: /dir#hash/", where the "#" swallows the token behind it.
+	target := r.URL.EscapedPath() + "/"
 	if r.URL.RawQuery != "" {
 		target += "?" + r.URL.RawQuery
 	}
@@ -151,14 +162,14 @@ func (s *Server) authenticated(r *http.Request) bool {
 }
 
 // setSecurityHeaders applies the §8 header set for pages the program authors:
-// no sniffing, no referrer, and a CSP that only allows same-origin resources.
-// Inline script and style are forbidden, which is why the UI's CSS and JS are
-// separate embedded files rather than strings inside the HTML.
+// no sniffing, no referrer, no framing, and a CSP that only allows same-origin
+// resources. Inline script and style are forbidden, which is why the UI's CSS and
+// JS are separate embedded files rather than strings inside the HTML.
 func setSecurityHeaders(w http.ResponseWriter) {
 	h := w.Header()
 	h.Set("X-Content-Type-Options", "nosniff")
 	h.Set("Referrer-Policy", "no-referrer")
-	h.Set("Content-Security-Policy", "default-src 'self'; style-src 'self'; script-src 'self'; img-src 'self' data:; media-src 'self'; frame-src 'self'")
+	h.Set("Content-Security-Policy", "default-src 'self'; style-src 'self'; script-src 'self'; img-src 'self' data:; media-src 'self'; frame-src 'self'; frame-ancestors 'none'")
 }
 
 // serveSecurityHeaders applies the §5.1 pair for served user files: sandbox
@@ -169,6 +180,13 @@ func serveSecurityHeaders(w http.ResponseWriter) {
 	h.Set("X-Content-Type-Options", "nosniff")
 	h.Set("Content-Security-Policy", "sandbox")
 	h.Set("Referrer-Policy", "no-referrer")
+	// Served bytes are not the program's own output, so they carry no
+	// freshness promise this server can keep: the file behind the URL can
+	// change between two requests, and a cached copy would be a stale answer
+	// to a request that is not conditional. ETag and Last-Modified already
+	// give a revalidating client everything it needs, and no-store keeps a
+	// token-protected response out of a shared cache.
+	h.Set("Cache-Control", "no-store")
 }
 
 // IsLoopback reports whether addr binds only the local machine. It drives the

@@ -88,6 +88,16 @@ printf '<svg xmlns="http://www.w3.org/2000/svg"><script>alert(1)</script></svg>\
 printf 'hello from a space\n' >"$FIXTURE/my file #1.txt"
 printf 'OUTSIDE-SECRET\n' >"$SECRET"
 
+# Names that can only be spelled one way in a URL, which is the point: a name
+# containing an encoded separator must not be reachable as two segments, and a
+# name containing a literal percent must be reachable at all. z/f.txt and
+# z%2ff.txt carry different bytes so serving the wrong one is visible.
+mkdir -p "$FIXTURE/z" "$FIXTURE/dir%pct"
+printf 'PLAIN-PATH\n' >"$FIXTURE/z/f.txt"
+printf 'ENCODED-NAME\n' >"$FIXTURE/z%2ff.txt"
+printf 'PCT-DIR\n' >"$FIXTURE/dir%pct/inner.txt"
+printf 'PCT-NAME\n' >"$FIXTURE/100%.txt"
+
 # 1 KiB of known bytes for the Range check.
 i=0
 : >"$FIXTURE/blob.bin"
@@ -166,14 +176,18 @@ check "curl | sh executes the served script" \
 check "plain-text listing with no Accept header" \
 	"api/
 configs/
+dir%pct/
 nested/
 scripts/
+z/
+100%.txt
 blob.bin
 healthz
 my file #1.txt
 notes.txt
 payload.html
-vector.svg" \
+vector.svg
+z%2ff.txt" \
 	"$(curl -fsSL "$BASE/" | sed '/^$/d')"
 
 check_contains "subdirectory listing is greppable" "setup.sh" \
@@ -235,6 +249,59 @@ if [ "$HAVE_SYMLINK" -eq 1 ]; then
 	check_not_contains "symlink escape leaks nothing" "OUTSIDE-SECRET" \
 		"$(curl -s "$BASE/escape.txt" || true)"
 fi
+
+# ------------------------------------------------- url spelling and names --
+
+# One name, one URL. A path must never be decoded twice: the second decode
+# would let "z%252ff.txt" (the only correct spelling of the file z%2ff.txt)
+# collapse onto the two-segment path z/f.txt and serve a different file.
+check "a name with an encoded separator serves its own bytes" "ENCODED-NAME" \
+	"$(curl -s --path-as-is "$BASE/z%252ff.txt" | tr -d '\n')"
+
+check "the plain two-segment path is still the plain path" "PLAIN-PATH" \
+	"$(curl -s "$BASE/z/f.txt" | tr -d '\n')"
+
+check "an encoded separator is not accepted as a separator" "400" \
+	"$(status --path-as-is "$BASE/z%2ff.txt")"
+
+check "a directory named with a percent is reachable" "200" \
+	"$(status "$BASE/dir%25pct/")"
+
+check "a file named with a percent is reachable" "PCT-NAME" \
+	"$(curl -s "$BASE/100%25.txt" | tr -d '\n')"
+
+# The redirect has to keep the URL escaped, or a client cannot follow it and a
+# fragment in the name swallows whatever follows it in the query.
+check "directory redirect stays escaped" "301" "$(status "$BASE/dir%25pct")"
+check "redirect Location keeps percent-encoding" "/dir%25pct/" \
+	"$(curl -sI "$BASE/dir%25pct" | tr -d '\r' | awk 'tolower($1)=="location:"{print $2}')"
+
+mkdir -p "$FIXTURE/my dir #1"
+check "redirect for a name with a space stays escaped" "/my%20dir%20%231/" \
+	"$(curl -sI "$BASE/my%20dir%20%231" | tr -d '\r' | awk 'tolower($1)=="location:"{print $2}')"
+
+# --------------------------------------------------------------- headers --
+
+check "UI page refuses framing" "1" \
+	"$(curl -sD- -o /dev/null -H 'Accept: text/html' "$BASE/" | tr -d '\r' | \
+		grep -i "^content-security-policy:" | grep -c "frame-ancestors 'none'")"
+
+check "served files are not stored by caches" "no-store" \
+	"$(curl -sI "$BASE/notes.txt" | tr -d '\r' | awk 'tolower($1)=="cache-control:"{print $2}')"
+
+check "listings vary on Accept" "Accept" \
+	"$(curl -sI -H 'Accept: application/json' "$BASE/" | tr -d '\r' | awk 'tolower($1)=="vary:"{print $2}')"
+
+# ----------------------------------------------------------------- assets --
+
+# A served file must win over the embedded copy, and it must stay inert: the
+# UI's own script is never replaced by served content.
+printf 'alert(1)\n' >"$FIXTURE/app.js"
+check "a served file beats the embedded asset" "alert(1)" \
+	"$(curl -s "$BASE/app.js" | tr -d '\n')"
+check "the served asset is not served as script" "text/plain; charset=utf-8" \
+	"$(curl -sI "$BASE/app.js" | tr -d '\r' | awk 'tolower($1)=="content-type:"{$1="";sub(/^ /,"");print}')"
+rm -f "$FIXTURE/app.js"
 
 # ------------------------------------------------------- range + download --
 

@@ -2,6 +2,7 @@ package fsx
 
 import (
 	"errors"
+	"fmt"
 	"os"
 	"path/filepath"
 	"runtime"
@@ -41,6 +42,18 @@ func TestDecodePath(t *testing.T) {
 		{"interior double slash", "/a//b", "", true},
 		{"api dir is ordinary", "/api", "api", false},
 		{"healthz file is ordinary", "/healthz", "healthz", false},
+		// A filename containing an encoded separator has exactly one legal
+		// spelling. "a%252fb.txt" is the name "a%2fb.txt"; decoding it as a
+		// whole path once more would produce the two-segment path "a/b.txt",
+		// a different file.
+		{"encoded slash in name", "/a%252fb.txt", "a%2fb.txt", false},
+		{"encoded slash alone is refused", "/a%2fb.txt", "", true},
+		{"uppercase encoded slash is refused", "/a%2Fb.txt", "", true},
+		{"percent dir reachable once", "/dir%25pct/inner.txt", "dir%pct/inner.txt", false},
+		// One decode, one name: "dir%2525pct" is the directory literally named
+		// "dir%25pct", a different entry that simply does not exist.
+		{"percent dir decoded once", "/dir%2525pct/inner.txt", "dir%25pct/inner.txt", false},
+		{"encoded dotdot is refused before decoding", "/%2E%2E/etc", "", true},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
@@ -415,4 +428,132 @@ func TestOpenMissingIsNotFound(t *testing.T) {
 	if _, _, err := fsys.OpenFile("nope.txt"); !errors.Is(err, ErrNotFound) {
 		t.Errorf("OpenFile(missing) error = %v, want ErrNotFound", err)
 	}
+}
+
+// TestReadDirCapKeepsTheSortedFirst checks the bounded top-K fold: the entries
+// a capped listing returns must equal the first limit entries of a full sort,
+// not merely "some" limit entries.
+func TestReadDirCapKeepsTheSortedFirst(t *testing.T) {
+	dir := t.TempDir()
+	// Names chosen so directory-first ordering, case-insensitive ordering and
+	// the bytewise tiebreak all matter, and so a naive fold would be visible.
+	names := []string{
+		"b.txt", "a.txt", "C.txt", "d/x.txt", "d/a.txt", "d/Z.txt", "e.txt",
+		"a.TXT", "A.txt", "0.txt", "z.txt", "m.txt",
+	}
+	for _, n := range names {
+		full := filepath.Join(dir, filepath.FromSlash(n))
+		if err := os.MkdirAll(filepath.Dir(full), 0o755); err != nil {
+			t.Fatal(err)
+		}
+		if err := os.WriteFile(full, []byte("x"), 0o644); err != nil {
+			t.Fatal(err)
+		}
+	}
+	fsys, err := Open(dir, false)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer fsys.Close()
+
+	all, _, err := fsys.ReadDir("", 0)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, limit := range []int{1, 2, 3, 5, len(all) - 1, len(all), len(all) + 1, 0, -1} {
+		got, truncated, err := fsys.ReadDir("", limit)
+		if err != nil {
+			t.Fatal(err)
+		}
+		want := all
+		wantTruncated := false
+		if limit > 0 && len(all) > limit {
+			want = all[:limit]
+			wantTruncated = true
+		}
+		var gotNames, wantNames []string
+		for _, e := range got {
+			gotNames = append(gotNames, e.Name)
+		}
+		for _, e := range want {
+			wantNames = append(wantNames, e.Name)
+		}
+		if strings.Join(gotNames, ",") != strings.Join(wantNames, ",") {
+			t.Errorf("limit %d: got %v, want %v", limit, gotNames, wantNames)
+		}
+		if truncated != wantTruncated {
+			t.Errorf("limit %d: truncated = %v, want %v", limit, truncated, wantTruncated)
+		}
+	}
+}
+
+// TestReadDirStreamsLargerThanTheBatch makes sure the batched read finds
+// everything past one batch boundary.
+func TestReadDirStreamsLargerThanTheBatch(t *testing.T) {
+	dir := t.TempDir()
+	const n = 2500 // comfortably more than the 1024-name batch
+	for i := range n {
+		name := filepath.Join(dir, fmt.Sprintf("f%05d.txt", i))
+		if err := os.WriteFile(name, []byte("x"), 0o644); err != nil {
+			t.Fatal(err)
+		}
+	}
+	fsys, err := Open(dir, false)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer fsys.Close()
+	entries, truncated, err := fsys.ReadDir("", 0)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(entries) != n {
+		t.Errorf("got %d entries, want %d", len(entries), n)
+	}
+	if truncated {
+		t.Error("uncapped ReadDir reported truncated")
+	}
+	// With a cap, the result must still be the sorted first n entries.
+	capped, truncated, err := fsys.ReadDir("", 10)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !truncated || len(capped) != 10 {
+		t.Errorf("capped read: %d entries, truncated=%v", len(capped), truncated)
+	}
+	for i := 1; i < len(capped); i++ {
+		if capped[i-1].Name > capped[i].Name {
+			t.Errorf("capped read is not sorted: %q before %q", capped[i-1].Name, capped[i].Name)
+		}
+	}
+}
+
+// TestReadDirNegativeLimitMeansNoCap pins the documented contract that
+// limit <= 0 means "no cap". The streaming rewrite briefly broke it: the
+// initial capacity hint was min(limit, 256), and min(-1, 256) is -1, so
+// make([]Entry, 0, -1) panicked. A capacity hint must never be negative.
+func TestReadDirNegativeLimitMeansNoCap(t *testing.T) {
+	fsys, dir := newTestFS(t, false)
+	uncapped, _, err := fsys.ReadDir("", 0)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, limit := range []int{-1, -2, -1000} {
+		got, truncated, err := fsys.ReadDir("", limit)
+		if err != nil {
+			t.Fatalf("ReadDir(limit=%d) returned an error: %v", limit, err)
+		}
+		if truncated {
+			t.Errorf("ReadDir(limit=%d) reported truncated for an uncapped read", limit)
+		}
+		if len(got) != len(uncapped) {
+			t.Errorf("ReadDir(limit=%d) returned %d entries, want %d", limit, len(got), len(uncapped))
+		}
+		for i := range got {
+			if got[i].Name != uncapped[i].Name {
+				t.Errorf("ReadDir(limit=%d)[%d] = %q, want %q", limit, i, got[i].Name, uncapped[i].Name)
+			}
+		}
+	}
+	_ = dir
 }

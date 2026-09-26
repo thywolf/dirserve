@@ -32,8 +32,8 @@ reads the same directory URLs you do, with `Accept: application/json`.
 
 ```
 cmd/dirserve/main.go    flags, env, root resolution, graceful shutdown
-internal/fsx/           ALL filesystem access: os.Root, decode-once path
-                        validation, listing, binary sniffing, content-type policy
+internal/fsx/           ALL filesystem access: os.Root, per-segment path
+                        decoding, listing, binary sniffing, content-type policy
 internal/server/        one handler: negotiate, then serve a file or a directory
 assets/                 index.html, style.css, app.js (embedded, real files)
 e2e.sh                  end-to-end acceptance: real server, real curl
@@ -78,6 +78,17 @@ POSIX `sh` — keep it that way, and keep it free of `bash`-isms.
   `fsx.ContentType`.
 - **Errors are plain text, never HTML.** A curl client has to be able to read
   the reason, and a filename must never reach an HTML context.
+- **Decode the escaped path, exactly once, per segment.** `fsx.DecodePath` takes
+  `r.URL.EscapedPath()` — never `r.URL.Path`, which `net/http` has *already*
+  decoded. Decoding it a second time is what used to make a file named
+  `a%2fb.txt` unreachable and alias it onto the directory `a/b.txt`. And
+  `redirectToSlash` must build its `Location` from `EscapedPath()` for the same
+  reason: the decoded form emits a redirect no client can follow for any
+  directory name with a space or a `#` in it. If you add a code path that turns a
+  request into another URL, this is the rule it has to follow.
+- **A name has exactly one URL spelling.** `%2f` inside a segment is refused, not
+  decoded into a separator. Don't "fix" that into a decode-and-split; the whole
+  point is that `a%2fb.txt` and `a/b.txt` must not be the same request.
 - **Line endings.** `.gitattributes` forces LF for `*.sh` and the Dockerfile. A
   CRLF `e2e.sh` fails on Linux as `/bin/sh^M: bad interpreter`. Keep the file
   mode `100755` on `e2e.sh`; CI runs `./e2e.sh` directly.

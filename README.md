@@ -137,11 +137,17 @@ is `405`. The process never writes to the directory it serves.
 Served files can't run anything in your browser. Every file response carries
 `X-Content-Type-Options: nosniff` and `Content-Security-Policy: sandbox`, and
 HTML, SVG, XML and templating files are served as `application/octet-stream` —
-a `payload.html` in the directory downloads as an opaque blob.
+a `payload.html` in the directory downloads as an opaque blob. The UI's own
+pages add `frame-ancestors 'none'`, so another site cannot iframe the browser.
 
 Paths can't escape the root. All filesystem access goes through one `os.Root`.
 `..`, percent-encoded traversal, NUL bytes and control characters are rejected
 before any syscall, and symlinks pointing outside the root fail to resolve.
+
+Each name has exactly one URL. A path is decoded once, per segment: `%2f`
+inside a segment is refused rather than turned into a separator, so a file named
+`a%2fb.txt` and a directory `a/b.txt` can never be the same request, and a
+directory named `dir%pct` is reachable at `/dir%25pct/`.
 
 With `--token`, every request needs `Authorization: Bearer <t>`. File URLs also
 accept `?access_token=<t>` so a command you copy out of the UI works in curl.

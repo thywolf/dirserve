@@ -713,3 +713,138 @@ func TestHumanSize(t *testing.T) {
 		}
 	}
 }
+
+// percentFixture serves a tree where one filename can only be spelled with an
+// encoded separator and one directory can only be spelled with an encoded
+// percent. The old whole-path decode collapsed both onto other entries.
+func percentFixture(t *testing.T) http.Handler {
+	dir := t.TempDir()
+	write := func(rel, content string) {
+		full := filepath.Join(dir, filepath.FromSlash(rel))
+		if err := os.MkdirAll(filepath.Dir(full), 0o755); err != nil {
+			t.Fatal(err)
+		}
+		if err := os.WriteFile(full, []byte(content), 0o644); err != nil {
+			t.Fatal(err)
+		}
+	}
+	// z/f.txt and z%2ff.txt are different files with contents that say which
+	// one was served.
+	write("z/f.txt", "DIR-SLASH\n")
+	write("z%2ff.txt", "ENCODED-SLASH\n")
+	write("dir%pct/inner.txt", "PCT-DIR\n")
+	write("100%.txt", "PERCENT-NAME\n")
+
+	fsys, err := fsx.Open(dir, false)
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { fsys.Close() })
+	return New(Config{
+		FS:              fsys,
+		MaxPreviewBytes: 1 << 20,
+		Quiet:           true,
+		Logger:          slog.New(slog.NewTextHandler(io.Discard, nil)),
+	})
+}
+
+// TestPercentInFilenameIsNotDoubleDecoded is the regression for a real bug:
+// net/http had already decoded r.URL.Path, and DecodePath decoded it a second
+// time, so "z%252ff.txt" (the only correct spelling of the file z%2ff.txt)
+// collapsed onto the directory z/f.txt and served the wrong bytes.
+func TestPercentInFilenameIsNotDoubleDecoded(t *testing.T) {
+	h := percentFixture(t)
+	rec := get(t, h, "/z%252ff.txt", "")
+	if rec.Code != 200 {
+		t.Fatalf("GET /z%%252ff.txt = %d, want 200", rec.Code)
+	}
+	if got := rec.Body.String(); got != "ENCODED-SLASH\n" {
+		t.Errorf("GET /z%%252ff.txt served %q, want the z%%2ff.txt bytes", got)
+	}
+	// The plain path must still be the plain path.
+	rec = get(t, h, "/z/f.txt", "")
+	if got := rec.Body.String(); got != "DIR-SLASH\n" {
+		t.Errorf("GET /z/f.txt served %q, want the z/f.txt bytes", got)
+	}
+	// A directory whose name contains a percent is reachable at its one
+	// correct URL, and rejects a doubled one.
+	if rec := get(t, h, "/dir%25pct/", ""); rec.Code != 200 {
+		t.Errorf("GET /dir%%25pct/ = %d, want 200", rec.Code)
+	}
+	// The doubled spelling names a different entry ("dir%25pct"), which is a
+	// 404 rather than a second route onto the same directory.
+	if rec := get(t, h, "/dir%2525pct/", ""); rec.Code != http.StatusNotFound {
+		t.Errorf("GET /dir%%2525pct/ = %d, want 404", rec.Code)
+	}
+	rec = get(t, h, "/100%25.txt", "")
+	if got := rec.Body.String(); got != "PERCENT-NAME\n" {
+		t.Errorf("GET /100%%25.txt served %q, want PERCENT-NAME", got)
+	}
+}
+
+// TestEncodedSlashInSegmentRejected keeps a filename from being spelled two
+// ways: "%2f" cannot become a separator, because the two-segment path it would
+// produce is a different file.
+func TestEncodedSlashInSegmentRejected(t *testing.T) {
+	h := percentFixture(t)
+	for _, p := range []string{"/z%2ff.txt", "/%2e%2e/etc/passwd", "/..%2f..%2fetc%2fpasswd", "/%2e%2e/%2e%2e/etc"} {
+		if rec := get(t, h, p, ""); rec.Code != http.StatusBadRequest {
+			t.Errorf("GET %s = %d, want 400", p, rec.Code)
+		}
+	}
+}
+
+// TestDirectoryRedirectIsEscaped is the regression for the second real bug:
+// redirectToSlash built its Location from the decoded path, so a directory
+// called "my dir" redirected to a URL a client cannot resolve, and "d#h"
+// produced a Location whose fragment swallowed the token behind it.
+func TestDirectoryRedirectIsEscaped(t *testing.T) {
+	h, _ := fixture(t)
+	rec := get(t, h, "/caf%C3%A9", "")
+	if rec.Code != http.StatusMovedPermanently {
+		t.Fatalf("status = %d, want 301", rec.Code)
+	}
+	if loc := rec.Header().Get("Location"); loc != "/caf%C3%A9/" {
+		t.Errorf("Location = %q, want the escaped /caf%%C3%%A9/", loc)
+	}
+	// A raw space or a bare # in a Location makes a redirect that no client
+	// can follow. Assert the header contains no character that would break it.
+	for _, p := range []string{"/caf%C3%A9", "/configs"} {
+		rec := get(t, h, p, "")
+		loc := rec.Header().Get("Location")
+		if strings.ContainsAny(loc, " #\"") {
+			t.Errorf("GET %s Location = %q contains a character a client cannot resolve", p, loc)
+		}
+	}
+}
+
+// TestUIPagesRefuseFraming pins frame-ancestors on the page the program
+// authors, so a hostile site cannot iframe the file browser.
+func TestUIPagesRefuseFraming(t *testing.T) {
+	h, _ := fixture(t)
+	rec := get(t, h, "/", "text/html")
+	if csp := rec.Header().Get("Content-Security-Policy"); !strings.Contains(csp, "frame-ancestors 'none'") {
+		t.Errorf("UI CSP = %q, want frame-ancestors 'none'", csp)
+	}
+}
+
+// TestServedFilesAreNotStored and TestListingsVaryOnAccept keep a token-protected
+// response out of a shared cache and stop a cache handing the HTML page to a
+// JSON client.
+func TestServedFilesAreNotStored(t *testing.T) {
+	h, _ := fixture(t)
+	rec := get(t, h, "/setup.sh", "")
+	if cc := rec.Header().Get("Cache-Control"); cc != "no-store" {
+		t.Errorf("file Cache-Control = %q, want no-store", cc)
+	}
+}
+
+func TestListingsVaryOnAccept(t *testing.T) {
+	h, _ := fixture(t)
+	for _, accept := range []string{"", "application/json", "text/html"} {
+		rec := get(t, h, "/", accept)
+		if v := rec.Header().Get("Vary"); v != "Accept" {
+			t.Errorf("Accept %q: Vary = %q, want Accept", accept, v)
+		}
+	}
+}

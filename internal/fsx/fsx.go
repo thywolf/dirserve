@@ -4,7 +4,7 @@
 // directory, so a request can never reach outside it: no "..", no absolute path,
 // no symlink whose target leaves the root (os.Root resolves symlinks that stay
 // inside and refuses the ones that don't). Paths handed to FS methods are
-// already percent-decoded and validated by DecodePath.
+// already percent-decoded exactly once and validated by DecodePath.
 package fsx
 
 import (
@@ -98,7 +98,11 @@ func (f *FS) Hidden(path string) bool {
 
 // Stat returns metadata for a root-relative path.
 func (f *FS) Stat(path string) (os.FileInfo, error) {
-	return f.root.Stat(rel(path))
+	info, err := f.root.Stat(rel(path))
+	if err != nil {
+		return nil, wrap(err)
+	}
+	return info, nil
 }
 
 // OpenFile opens a root-relative path for reading, together with its metadata.
@@ -119,6 +123,11 @@ func (f *FS) OpenFile(path string) (*os.File, os.FileInfo, error) {
 // bytewise, capped at limit entries (limit <= 0 means no cap). The bool result
 // reports that entries were dropped. Entries that vanish or cannot be stat'ed
 // mid-listing are skipped rather than failing the whole listing.
+//
+// The sort needs every name before it can say which limit entries come first,
+// so the cap cannot bound the reading — it bounds the retention. Names are
+// pulled in batches and entries are folded into a bounded top-K, so a directory
+// with a million entries costs O(limit) memory here rather than O(entries).
 func (f *FS) ReadDir(path string, limit int) ([]Entry, bool, error) {
 	dir, err := f.root.Open(rel(path))
 	if err != nil {
@@ -126,33 +135,56 @@ func (f *FS) ReadDir(path string, limit int) ([]Entry, bool, error) {
 	}
 	defer dir.Close()
 
-	// ReadDir(-1) streams the directory in batches, so a huge directory costs
-	// one entry slice at a time instead of the whole listing up front.
-	names, err := dir.Readdirnames(-1)
-	if err != nil {
-		return nil, false, wrap(err)
-	}
-	entries := make([]Entry, 0, len(names))
-	for _, name := range names {
-		if f.hideDots && strings.HasPrefix(name, ".") {
-			continue
+	// limit <= 0 means no cap, so the capacity hint must never be negative:
+	// make([]Entry, 0, -1) panics. Clamp to the same 256 the fold targets.
+	entries := make([]Entry, 0, min(max(limit, 0), 256))
+	truncated := false
+	// nameBatch is a read size, not a retention bound: Readdirnames streams
+	// from the directory handle, so one batch of names is alive at a time
+	// instead of the whole directory.
+	const nameBatch = 1024
+	for {
+		names, err := dir.Readdirnames(nameBatch)
+		for _, name := range names {
+			if f.hideDots && strings.HasPrefix(name, ".") {
+				continue
+			}
+			info, err := f.root.Stat(join(path, name))
+			if err != nil {
+				continue // raced with a delete, or an escaping symlink: not servable
+			}
+			entries = append(entries, Entry{
+				Name:    name,
+				IsDir:   info.IsDir(),
+				Size:    info.Size(),
+				ModTime: info.ModTime(),
+			})
+			// Fold back down to the cap once the batch has pushed us past it.
+			// Truncating to the sorted first limit after each fold is what makes
+			// the final result equal to a full sort of every entry: an entry
+			// already dropped was worse than limit entries that outrank it, and
+			// those outranking entries are never themselves dropped in turn.
+			if limit > 0 && len(entries) > 2*limit {
+				SortEntries(entries)
+				entries = append(entries[:0], entries[:limit]...)
+				truncated = true
+			}
 		}
-		info, err := f.root.Stat(join(path, name))
 		if err != nil {
-			continue // raced with a delete, or an escaping symlink: not servable
+			if errors.Is(err, io.EOF) {
+				break
+			}
+			return nil, false, wrap(err)
 		}
-		entries = append(entries, Entry{
-			Name:    name,
-			IsDir:   info.IsDir(),
-			Size:    info.Size(),
-			ModTime: info.ModTime(),
-		})
+		if len(names) == 0 {
+			break
+		}
 	}
 	SortEntries(entries)
 	if limit > 0 && len(entries) > limit {
 		return entries[:limit], true, nil
 	}
-	return entries, false, nil
+	return entries, truncated, nil
 }
 
 // SortEntries orders a listing: directories first, then case-insensitive
