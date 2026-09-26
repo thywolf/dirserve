@@ -67,6 +67,27 @@ function humanTime(unix) {
   return d.toLocaleDateString([], { year: "numeric", month: "short", day: "numeric" });
 }
 
+
+// A short human label for a file's kind, derived from its extension. This
+// mirrors the server's content-type policy closely enough to be honest without
+// duplicating it: an unknown extension simply has no label.
+const KIND_BY_EXT = {
+  png: "PNG image", jpg: "JPEG image", jpeg: "JPEG image", gif: "GIF image",
+  webp: "WebP image", avif: "AVIF image", bmp: "bitmap", ico: "icon", svg: "SVG image",
+  mp4: "MP4 video", webm: "WebM video", mov: "QuickTime video", mkv: "Matroska video",
+  mp3: "MP3 audio", wav: "WAV audio", flac: "FLAC audio", ogg: "Ogg audio", m4a: "AAC audio",
+  pdf: "PDF", zip: "zip", gz: "gzip", tar: "tar", xz: "xz", zst: "zstd", "7z": "7-Zip",
+  wasm: "WebAssembly", sh: "shell", py: "Python", js: "JavaScript", ts: "TypeScript",
+  go: "Go", rs: "Rust", c: "C", h: "C header", cpp: "C++", java: "Java", rb: "Ruby",
+  json: "JSON", yaml: "YAML", yml: "YAML", toml: "TOML", md: "Markdown", txt: "text",
+  conf: "config", ini: "config", env: "dotenv", sql: "SQL", lock: "lockfile",
+};
+
+function fileKind(name) {
+  const dot = name.lastIndexOf(".");
+  if (dot < 1) return "";
+  return KIND_BY_EXT[name.slice(dot + 1).toLowerCase()] || "";
+}
 const listing = async (path) => {
   const res = await fetch(urlOf(path), { headers: { Accept: "application/json" } });
   if (!res.ok) throw new Error("status " + res.status);
@@ -253,18 +274,66 @@ async function show(path, replace) {
   setHash(path, replace);
   selected = path;
   renderTree();
-
-  ui.head.hidden = false;
-  ui.pane.replaceChildren();
+  // Once the user has actually opened something, the root shows its listing
+  // rather than the welcome state again.
+  if (path !== "") ui.root.dataset.touched = "1";
   ui.pane.scrollTop = 0;
   renderHead(path);
 
   const node = nodes.get(path);
   const isDir = path === "" || !!(node && node.isDir);
+
+  // The pane is cleared on every navigation, so the welcome state is built here
+  // rather than shipped as static markup that the first render throws away.
+  if (path === "" && !ui.root.dataset.touched) {
+    ui.pane.replaceChildren(welcome());
+    return;
+  }
+
   const body = document.createElement("div");
-  ui.pane.appendChild(body);
+  ui.pane.replaceChildren(body);
   if (isDir) renderDir(body, path, node);
   else await renderFile(body, path, node);
+}
+
+// The welcome state: what this is, and how to drive it. Built in JS because the
+// pane is re-rendered on every navigation, so static markup would not survive
+// the first selection.
+function welcome() {
+  const d = document.createElement("div");
+  d.className = "blank";
+
+  const glyph = document.createElement("div");
+  glyph.className = "glyph";
+  glyph.innerHTML = ICON.dir;
+  glyph.setAttribute("aria-hidden", "true");
+
+  const title = document.createElement("h2");
+  title.textContent = "Read-only, by design";
+
+  const lead = document.createElement("p");
+  lead.textContent = "Pick a file to preview it here, or take the whole tree from a shell:";
+
+  const cmd = document.createElement("p");
+  const code = document.createElement("code");
+  code.textContent = "curl -fsSL " + absUrl("") + "…";
+  cmd.appendChild(code);
+
+  const keys = document.createElement("p");
+  keys.className = "keys";
+  for (const [combo, label] of [["/", "filter"], ["↑ ↓", "move"], ["↵", "open"], ["esc", "clear"]]) {
+    const span = document.createElement("span");
+    for (const k of combo.split(" ")) {
+      const kbd = document.createElement("kbd");
+      kbd.textContent = k;
+      span.appendChild(kbd);
+    }
+    span.appendChild(document.createTextNode(" " + label));
+    keys.appendChild(span);
+  }
+
+  d.append(glyph, title, lead, cmd, keys);
+  return d;
 }
 
 function blank(host, icon, title, text) {
@@ -293,7 +362,11 @@ function curlHint(path) {
 // A directory preview lists this directory's own entries, so the pane is useful
 // even with the tree collapsed.
 function renderDir(host, path, node) {
-  const kids = node && node.loaded ? node.children : [];
+  // The root has no node of its own in the map — its entries are the depth-0
+  // nodes — so read the children from whichever source applies.
+  const kids = node && node.loaded ? node.children
+    : path === "" ? [...nodes.values()].filter((n) => n.depth === 0)
+    : [];
   if (!kids || !kids.length) {
     blank(host, "dir", "Empty directory", "Nothing here. From a shell:");
     host.appendChild(curlHint(path));
@@ -301,30 +374,55 @@ function renderDir(host, path, node) {
   }
   const list = document.createElement("div");
   list.className = "dirlist";
+
+  // A heading gives the pane a title when it is showing a directory, so the
+  // eye has somewhere to land before the rows start.
+  const label = document.createElement("div");
+  label.className = "row note";
+  label.style.padding = "0 16px 6px";
+  label.textContent = kids.length + (kids.length === 1 ? " item" : " items");
+  list.appendChild(label);
+
   for (const child of kids) {
     const row = document.createElement("div");
     row.className = "row " + (child.isDir ? "dir" : "file");
     const ico = document.createElement("span");
     ico.className = "ico";
     ico.innerHTML = child.isDir ? ICON.dir : ICON.file;
-    const label = document.createElement("span");
-    label.className = "name";
-    label.textContent = child.name;
-    row.append(ico, label);
+    const name = document.createElement("span");
+    name.className = "name";
+    name.textContent = child.name;
+    row.append(ico, name);
+
     if (!child.isDir) {
       const size = document.createElement("span");
       size.className = "size";
       size.textContent = humanSize(child.size);
       row.appendChild(size);
+    } else {
+      const chev = document.createElement("span");
+      chev.className = "go";
+      chev.innerHTML = ICON.chevron;
+      row.appendChild(chev);
     }
+
     row.addEventListener("click", async () => {
       if (child.isDir) await toggle(child, true);
       show(child.path);
     });
     list.appendChild(row);
   }
+
+  if (node && node.truncated) {
+    const note = document.createElement("div");
+    note.className = "row note";
+    note.style.padding = "8px 16px 0";
+    note.textContent = "listing truncated at 5,000 entries";
+    list.appendChild(note);
+  }
   host.appendChild(list);
 }
+
 
 async function renderFile(host, path, node) {
   const url = absUrl(path) + (auth() ? "?" + auth() : "");
@@ -358,6 +456,7 @@ async function renderText(host, url) {
   }
   const pre = document.createElement("pre");
   pre.className = "code";
+  pre.setAttribute("aria-label", "file contents");
   const code = document.createElement("code");
   for (const line of text.split("\n")) {
     const div = document.createElement("span");
@@ -407,9 +506,16 @@ function renderHead(path) {
     const sep = document.createElement("span");
     sep.className = "sep";
     sep.textContent = "/";
-    const link = document.createElement(i === segs.length - 1 ? "b" : "span");
+    const last = i === segs.length - 1;
+    const link = document.createElement(last ? "b" : "span");
     link.textContent = seg;
-    if (i < segs.length - 1) link.addEventListener("click", () => show(acc));
+    if (!last) {
+      // Ancestors are links, and the tooltip says where they lead so a long
+      // path is still unambiguous when the labels are truncated.
+      link.dataset.link = "";
+      link.title = acc;
+      link.addEventListener("click", () => show(acc));
+    }
     ui.crumb.append(sep, link);
   });
 
@@ -433,6 +539,13 @@ function renderHead(path) {
     put(humanSize(node ? node.size : 0));
     dot();
     put(humanTime(node ? node.mtime : 0));
+    // The type is what tells a reader whether the preview below is text, an
+    // image or a blob; without it the pane gives no clue.
+    const kind = fileKind(nameOf(path));
+    if (kind) {
+      dot();
+      put(kind);
+    }
   }
 
   ui.actions.replaceChildren();
@@ -526,11 +639,27 @@ document.addEventListener("keydown", (e) => {
   if (sel) sel.scrollIntoView({ block: "nearest" });
 });
 
-// ---------------------------------------------------------------- boot ----
+// Own navigations use pushState/replaceState, which fire neither event, so
+// these two only ever fire for a real URL change: the back button, a hand-
+// edited hash, or a pasted link. Both are handled because a hash assignment
+// fires hashchange but not popstate, while history navigation fires both;
+// lastRendered keeps that from rendering twice.
+let lastRendered = null;
+function onURLChanged() {
+  const next = hashPath();
+  if (next === lastRendered) return;
+  lastRendered = next;
+  show(next, true).catch(() => {
+    ui.tree.replaceChildren(noteRow("cannot read directory", 0));
+  });
+}
+window.addEventListener("popstate", onURLChanged);
+window.addEventListener("hashchange", onURLChanged);
 
-window.addEventListener("popstate", () => show(hashPath(), true));
 ui.filter.addEventListener("input", renderTree);
 
-show(hashPath(), true).catch(() => {
+const initial = hashPath();
+lastRendered = initial;
+show(initial, true).catch(() => {
   ui.tree.replaceChildren(noteRow("cannot read directory", 0));
 });
