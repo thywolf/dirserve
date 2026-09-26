@@ -125,6 +125,7 @@ jobs:
             type=raw,value=latest,enable={{is_default_branch}}
 
       - name: Build and push
+        id: push
         if: github.event_name != 'pull_request'
         uses: docker/build-push-action@v6
         with:
@@ -138,7 +139,66 @@ jobs:
           build-args: |
             VERSION=${{ github.ref_name }}
           cache-from: type=gha
-          cache-to: type=gha,mode=max
+          cache-to: type=gha,mode=max      # The image is live in the registry at this point, so tell whatever runs
+      # the stack to pull it. This runs only on a successful push — never for a
+      # pull request, and never if the build above failed, so a broken image can
+      # never trigger a redeploy.
+      - name: Notify the deploy webhook
+        if: github.event_name != 'pull_request' && success() && steps.push.outcome == 'success'
+        env:
+          # The || '' matters: under set -u an absent secret would otherwise be
+          # an unbound variable and abort the step before the check below runs.
+          DEPLOY_WEBHOOK_URL: ${{ secrets.DEPLOY_WEBHOOK_URL || '' }}
+          IMAGE_DIGEST: ${{ steps.push.outputs.digest }}
+          IMAGE_TAGS: ${{ steps.meta.outputs.tags }}
+          IMAGE_REF: ${{ github.ref_name }}
+        run: |
+          set -euo pipefail
+
+          # Default-expand every variable: "no secret configured" must skip
+          # cleanly, never fail a build that otherwise succeeded.
+          DEPLOY_WEBHOOK_URL="${DEPLOY_WEBHOOK_URL:-}"
+          IMAGE_DIGEST="${IMAGE_DIGEST:-}"
+          IMAGE_TAGS="${IMAGE_TAGS:-}"
+          IMAGE_REF="${IMAGE_REF:-}"
+          GITHUB_SHA="${GITHUB_SHA:-unknown}"
+
+          if [ -z "${DEPLOY_WEBHOOK_URL}" ]; then
+            echo "::notice::DEPLOY_WEBHOOK_URL is not set; skipping the deploy webhook"
+            exit 0
+          fi
+
+          # The tag list is newline separated. Fold it into a comma separated
+          # JSON array here rather than splitting in a loop, so nothing depends
+          # on IFS handling and no tag can inject a stray quote.
+          tags_csv="$(printf '%s' "${IMAGE_TAGS}" | tr '\n' ',')"
+          payload="{\"repository\":\"thywolf/dirserve\",\"ref\":\"${IMAGE_REF}\",\"digest\":\"${IMAGE_DIGEST}\",\"commit\":\"${GITHUB_SHA}\",\"tags\":\"${tags_csv}\"}"
+
+          echo "Notifying the deploy webhook (${IMAGE_REF})…"
+          echo "payload: ${payload}"
+
+          # curl writes the status even on failure; the fallback only applies
+          # when it writes nothing at all, so the two must not concatenate
+          # into a bogus 000000.
+          # An explicit POST with a JSON body: some hook endpoints reject a GET,
+          # and some want the content type set.
+          code="$(curl -sS -o /tmp/hook-body -w '%{http_code}' \
+            --max-time 30 --retry 2 --retry-delay 5 \
+            -X POST \
+            -H 'Content-Type: application/json' \
+            -d "${payload}" \
+            "${DEPLOY_WEBHOOK_URL}" || true)"
+          [ -n "${code}" ] || code="000"
+
+          echo "webhook responded: HTTP ${code}"
+          if [ "${code}" -lt 200 ] || [ "${code}" -ge 300 ]; then
+            # Warn rather than fail: the image is already published, so failing
+            # here would only misreport a good build as broken.
+            echo "::warning::deploy webhook returned HTTP ${code}"
+            cat /tmp/hook-body || true
+          else
+            echo "::notice::deploy webhook accepted (HTTP ${code})"
+          fi
 
       # Pull requests still get a build-only run, so the Dockerfile is proven to
       # work before it is ever published.
