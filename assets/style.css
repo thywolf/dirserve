@@ -124,6 +124,11 @@ button { font: inherit; color: inherit; }
 
 .app {
   display: grid;
+  /* The implicit column is auto, so it grows to the widest row's min-content
+     and lets a long served path widen the whole page. minmax(0, 1fr) pins it
+     to the viewport and makes the overflow land inside the row that caused
+     it, which is where the ellipsis can do its job. */
+  grid-template-columns: minmax(0, 1fr);
   grid-template-rows: auto 1fr;
   height: 100dvh;
 }
@@ -199,6 +204,10 @@ button { font: inherit; color: inherit; }
 .root:hover { border-color: var(--border-strong); background: var(--surface-3); }
 
 .root span {
+  /* A flex item floors at its content width by default, which is what makes
+     the served path refuse to shrink: the pill is the one thing in the topbar
+     allowed to ellipsize, so its min-width has to be 0 for that to happen. */
+  min-width: 0;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
@@ -516,11 +525,14 @@ button { font: inherit; color: inherit; }
   border-color: var(--accent);
   background: var(--accent-wash);
 }
+/* The tree only becomes a drawer below 760px, so the trigger and the
+   slide-back chevron have no job on a wide screen and stay hidden. */
+.drawer-btn { display: none; }
+.icon-only { display: none; padding: 0; }
+/* The scrim is created by the markup but only ever shown by app.js on a
+   phone; [hidden] keeps it out of the desktop layer entirely. */
+.scrim { display: none; }
 
-@media (max-width: 760px) {
-  .btn .label { display: none; }
-  .btn { padding: 0 9px; }
-}
 
 /* ── preview surfaces ────────────────────────────────────────────────── */
 
@@ -737,4 +749,116 @@ pre.code .l:hover { background: color-mix(in srgb, var(--accent) 4%, transparent
   min-width: 18px;
   display: inline-block;
   text-align: center;
+}
+
+/* ── phone ────────────────────────────────────────────────────────────── */
+/* Below the breakpoint the tree cannot afford a column: a 288px sidebar
+   leaves the preview a sliver, so the two-column grid collapses to one and
+   the tree slides over the pane instead of beside it. app.js owns the
+   [data-drawer] state; CSS only reacts to it. */
+@media (max-width: 760px) {
+  .body {
+    /* Same reason as .app: an auto column would let a wide code line or a long
+       breadcrumb widen the page instead of scrolling inside the pane. */
+    grid-template-columns: minmax(0, 1fr);
+  }
+  .sidebar {
+    position: fixed;
+    inset: var(--topbar-h) auto 0 0;
+    z-index: 5;
+    width: min(84vw, 340px);
+    border-right: 0;
+    box-shadow: var(--shadow-lg);
+    transform: translateX(-100%);
+    visibility: hidden;
+    /* visibility flips with the slide so the panel is not a tab stop while
+       it is off screen, without waiting out the transform to close. */
+    transition: transform var(--base) var(--ease), visibility var(--base) var(--ease);
+  }
+  :root[data-drawer="open"] .sidebar {
+    transform: none;
+    visibility: visible;
+  }
+  /* Tap-outside dismissal: inert and transparent until the drawer opens, and
+     the opacity carries the fade so the pane is not blocked when closed. */
+  .scrim {
+    position: fixed;
+    inset: var(--topbar-h) 0 0 0;
+    z-index: 4;
+    background: rgba(8, 10, 14, 0.42);
+    opacity: 0;
+    pointer-events: none;
+    transition: opacity var(--base) var(--ease);
+  }
+  .scrim:not([hidden]) { display: block; }
+  :root[data-drawer="open"] .scrim {
+    opacity: 1;
+    pointer-events: auto;
+  }
+  /* The trigger is the only way back to the tree once the columns are gone. */
+  .drawer-btn {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    flex: none;
+    width: 40px;
+    height: 40px;
+    padding: 0;
+    border-radius: var(--r-sm);
+    border: 1px solid var(--border);
+    background: var(--surface-2);
+    color: var(--dim);
+  }
+  .drawer-btn svg { width: 15px; height: 15px; }
+  /* The chevron is the way back to the tree from wherever the eye already
+     is, so it lives in the topbar beside the trigger and stays reachable
+     while the scrim covers the pane. */
+  .icon-only {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    flex: none;
+    width: 40px;
+    height: 40px;
+    padding: 0;
+  }
+  /* A pointer is a few millimetres tall; a thumb is not, so the hit areas
+     grow rather than the type getting bigger. */
+  .row { height: 40px; }
+  .dirlist .row { height: 44px; }
+  .btn { height: 40px; }
+  .filter { height: 40px; }
+  .head {
+    flex-wrap: wrap;
+    min-height: 0;
+    gap: 8px;
+    padding: 8px 12px;
+  }
+  .crumb { font-size: var(--fs-sm); }
+  /* Below ~380px the brand word, the read-only badge and the served path no
+     longer fit on one line, and an auto grid column grows to the widest of
+     them, so the whole page pans sideways. The badge and the brand mark are
+     the chrome that can give ground: both are decoration next to the path,
+     and the path already ellipsizes from the left, which is the end that
+     identifies the directory. */
+  .readonly { display: none; }
+  .brand span:last-child { display: none; }
+  .root {
+    /* The pill takes whatever is left over rather than a share of it, so a
+       long served path can never widen the row on a narrow screen. */
+    flex: 1 1 0;
+    max-width: none;
+  }
+  .pane { -webkit-overflow-scrolling: touch; }
+  /* The line-number gutter costs a quarter of a 360px screen, so it shrinks
+     to what still reads as a column. */
+  pre.code { font-size: var(--fs-xs); }
+  pre.code .l::before {
+    width: 3ch;
+    margin-right: 10px;
+    padding: 0 8px 0 0;
+  }
+  .media { padding: 12px; }
+  .media img, .media video { max-height: 52dvh; }
+  .media embed { height: 52dvh; }
 }

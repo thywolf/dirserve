@@ -9,6 +9,10 @@ curl -fsSL http://127.0.0.1:8080/setup.sh | bash
 Open the same URL in a browser and you get a file browser with previews. That's
 the whole thing: one directory made reachable, and nothing added to it.
 
+It works on a phone. Below 760px the tree becomes a slide-over drawer and the
+preview takes the whole screen, so a link pasted into a phone browser is usable
+without pinching to zoom.
+
 ## Why
 
 Sometimes a script lives on your laptop and needs to be somewhere a Docker
@@ -163,8 +167,8 @@ exactly what it says.
 
 ## How it's built
 
-976 lines of Go, standard library only — `go.mod` has no `require` block and a
-test enforces it. The UI is about 1500 lines of HTML/CSS/JS embedded in the
+1400 lines of Go, standard library only — `go.mod` has no `require` block and a
+test enforces it. The UI is about 1700 lines of HTML/CSS/JS embedded in the
 binary, served as real files so the CSP can forbid inline script and style.
 
 Two decisions do most of the work:

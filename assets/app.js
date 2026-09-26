@@ -14,11 +14,18 @@ const ui = {
   root: el("root-path"), tree: el("tree"), filter: el("filter"),
   head: el("head"), crumb: el("crumb"), meta: el("meta"),
   actions: el("actions"), pane: el("pane"),
+  drawer: el("btn-drawer"), back: el("btn-back"), scrim: el("scrim"),
+  sidebar: document.querySelector(".sidebar"),
 };
 
 // The server renders --max-preview-bytes into the shell; anything larger is
 // offered as a download rather than pulled into the browser.
 const MAX_PREVIEW = Number(document.body.dataset.maxPreview) || 1048576;
+
+// The phone breakpoint, declared with the other module constants rather than
+// beside the drawer code: show() reads it during the initial load, which runs
+// before the bottom of this file is evaluated.
+const narrow = matchMedia("(max-width: 760px)");
 
 // ---------------------------------------------------------------- icons ----
 // Inline SVG only: no image files, no icon font, nothing extra to load.
@@ -278,6 +285,12 @@ async function show(path, replace) {
   // rather than the welcome state again.
   if (path !== "") ui.root.dataset.touched = "1";
   ui.pane.scrollTop = 0;
+  // A tap on a row inside the drawer navigates, and the preview is what the
+  // user came for, so the drawer closes and the pane reclaims the screen.
+  if (narrow.matches) setDrawer(false);
+  // The head ships hidden, but the breadcrumb is the only way back up the
+  // tree, so it appears as soon as anything is selected.
+  ui.head.hidden = false;
   renderHead(path);
 
   const node = nodes.get(path);
@@ -590,7 +603,39 @@ function dlBtn(path) {
   a.title = "Download";
   return a;
 }
-
+// ------------------------------------------------------------- drawer ----
+// Below the breakpoint the tree is a slide-over drawer rather than a column:
+// the two-column grid squeezes the preview to a sliver at phone widths. The
+// state lives on the document element so the CSS can key off it, and that one
+// attribute is the source of truth for the button, the scrim and Escape.
+function setDrawer(open, force) {
+  // There is no drawer above the breakpoint, so the button is inert there.
+  // force is only how a resize back to desktop clears a phone-only state.
+  if (!narrow.matches && !force) return;
+  document.documentElement.dataset.drawer = open ? "open" : "closed";
+  ui.drawer.setAttribute("aria-expanded", open ? "true" : "false");
+  ui.scrim.hidden = !open;
+  // Opening puts the caret in the filter: filtering is what the drawer is for
+  // on a phone, and it saves a second tap on the way to any file.
+  if (open) ui.filter.focus();
+  // Dismissing with the keyboard would strand focus on a control that is now
+  // off screen, so it goes back to the button that opened the drawer.
+  else if (ui.sidebar.contains(document.activeElement)) ui.drawer.focus();
+}
+// The trigger toggles: while the drawer is open the scrim covers the pane but
+// not the topbar, so this is the only always-reachable way back to the tree's
+// siblings, and a trigger that only opens would strand the user on it.
+ui.drawer.addEventListener("click", () =>
+  setDrawer(document.documentElement.dataset.drawer !== "open"));
+ui.scrim.addEventListener("click", () => setDrawer(false));
+ui.back.addEventListener("click", () => setDrawer(false));
+// Tapping a row navigates, and a phone has no room for the tree and the
+// preview at once, so the drawer gets out of the way once the row is handled.
+ui.tree.addEventListener("click", (e) => {
+  if (e.target.closest(".row.dir, .row.file")) setDrawer(false);
+});
+// Leaving the phone range must not strand a phone-only drawer on desktop.
+narrow.addEventListener("change", (e) => { if (!e.matches) setDrawer(false, true); });
 // ------------------------------------------------------------ keyboard ----
 
 const visibleRows = () =>
@@ -604,6 +649,12 @@ document.addEventListener("keydown", (e) => {
     return;
   }
   if (e.key === "Escape") {
+    // The drawer is the topmost layer, so it takes the first Escape and the
+    // filter is left for the next time it is opened.
+    if (document.documentElement.dataset.drawer === "open") {
+      setDrawer(false);
+      return;
+    }
     if (document.activeElement === ui.filter) {
       ui.filter.value = "";
       renderTree();

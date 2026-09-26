@@ -40,7 +40,7 @@ e2e.sh                  end-to-end acceptance: real server, real curl
 .github/workflows/ci.yml
 ```
 
-Roughly 975 lines of non-test Go and 1500 lines of assets.
+About 1400 lines of non-test Go and 1700 lines of assets.
 
 ## Commands
 
@@ -60,6 +60,10 @@ contract, all three directory representations, traversal and symlink
 confinement, `Range`, `?dl=1`, method rejection, and token mode. It is
 POSIX `sh` — keep it that way, and keep it free of `bash`-isms.
 
+It has no browser, so it says nothing about layout. A phone-sized viewport used
+to squeeze the preview pane to 102px and let the document pan sideways, and the
+whole HTTP contract stayed green. Layout changes need a real viewport check.
+
 ## Rules that are easy to break by accident
 
 - **`gofmt` clean and `go vet` clean.** CI fails on both. Run `gofmt -w .`.
@@ -69,6 +73,21 @@ POSIX `sh` — keep it that way, and keep it free of `bash`-isms.
   *siblings* after it, not elements inside it. A `.row` is a flex container, so
   nesting rows makes a subtree into one flex item and the layout collapses. This
   cost an afternoon; don't reintroduce it.
+- **The phone layout is a drawer, not a second column.** Below 760px `.body`
+  collapses to one column and the tree becomes a fixed slide-over keyed off
+  `documentElement.dataset.drawer`, which `setDrawer()` in `app.js` owns. CSS
+  only reacts to that attribute; do not add a second source of truth. The
+  trigger and the back chevron both live in `.topbar` *on purpose*: the scrim
+  covers everything below it, so a control in `.head` cannot be tapped while
+  the drawer is open. Putting one back down there needs a `z-index` patch and
+  will be hit-tested as unreachable.
+- **Grid columns here are `minmax(0, 1fr)`, never `auto` or bare `1fr`.** An
+  auto column sizes to its widest row's min-content, so one long filename in
+  the topbar or the pane widens the whole document and the page pans sideways
+  on a phone. `.app` has the same trap with its *implicit* column, which is why
+  it is declared explicitly. The same reasoning puts `min-width: 0` on
+  `.root span`: a flex item floors at its content width, so without it the
+  served-path pill refuses to ellipsize and re-breaks the topbar.
 - **Everything from the filesystem reaches the DOM via `textContent`.** A
   filename is attacker-controlled. The only `innerHTML` calls in `app.js` write
   icon strings defined in that same file.

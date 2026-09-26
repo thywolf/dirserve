@@ -18,6 +18,12 @@ coverage.*
 /data
 /data/
 
+# ---- scratch ---------------------------------------------------------------
+# Throwaway fixtures and test binaries. Kept out of the index because Go
+# walks the whole module for ./... : a stray Go file or fixture tree under
+# here turns `go test ./...` into a setup failure, not a test failure.
+/tmp/
+
 # ---- editor / OS noise --------------------------------------------------
 .vscode/
 .idea/

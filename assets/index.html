@@ -3,6 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="theme-color" content="#f6f7f8">
 <meta name="robots" content="noindex, nofollow">
 <title>dirserve — {{if .Path}}{{.Path}}{{else}}root{{end}}</title>
 <link rel="icon" href="/favicon.svg" type="image/svg+xml">
@@ -11,6 +12,16 @@
 
 <div class="app">
   <header class="topbar">
+    <button type="button" class="btn icon-only" id="btn-back" aria-label="Back to files">
+      <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+        <path d="m9.8 3.6-4 4.4 4 4.4"/>
+      </svg>
+    </button>
+    <button type="button" class="btn drawer-btn" id="btn-drawer" aria-label="Browse files" aria-expanded="false" aria-controls="tree">
+      <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+        <path d="M6 4.2h7.2M6 8h7.2M6 11.8h7.2M2.8 4.2h.01M2.8 8h.01M2.8 11.8h.01"/>
+      </svg>
+    </button>
     <div class="brand">
       <span class="mark" aria-hidden="true">
         <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round">
@@ -70,6 +81,7 @@
            anything static here would be discarded on the first selection. -->
       <div class="pane" id="pane"></div>
     </main>
+    <div class="scrim" id="scrim" hidden></div>
   </div>
 </div>
 <script src="/app.js" defer></script>
