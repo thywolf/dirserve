@@ -317,8 +317,15 @@ func TestConfineSymlinkEscape(t *testing.T) {
 	if err := os.Symlink(outside, filepath.Join(dir, "escape-dir")); err != nil {
 		t.Fatal(err)
 	}
-	// An in-root symlink is legal and must resolve normally.
-	if err := os.Symlink(filepath.Join(dir, "notes.txt"), filepath.Join(dir, "alias.txt")); err != nil {
+	// A *relative* symlink staying inside the root resolves normally. An
+	// absolute symlink does not, even when it points inside the root: os.Root
+	// rejects absolute targets outright rather than checking where they land,
+	// which is the stricter and safer reading. Both are covered here so the
+	// documented behaviour cannot drift.
+	if err := os.Symlink("notes.txt", filepath.Join(dir, "alias.txt")); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Symlink(filepath.Join(dir, "notes.txt"), filepath.Join(dir, "abs-alias.txt")); err != nil {
 		t.Fatal(err)
 	}
 
@@ -339,11 +346,24 @@ func TestConfineSymlinkEscape(t *testing.T) {
 			t.Errorf("listing exposed escaping symlink %q", e.Name)
 		}
 	}
+	// The relative in-root symlink resolves and yields the real bytes.
 	f, _, err := fsys.OpenFile("alias.txt")
 	if err != nil {
-		t.Fatalf("in-root symlink should resolve: %v", err)
+		t.Fatalf("relative in-root symlink should resolve: %v", err)
 	}
+	info, err := f.Stat()
 	f.Close()
+	if err != nil {
+		t.Fatalf("stat through the symlink: %v", err)
+	}
+	if info.Size() != int64(len("hello\n")) {
+		t.Errorf("symlink resolved to %d bytes, want the target's %d", info.Size(), len("hello\n"))
+	}
+
+	// The absolute one is refused even though its target is inside the root.
+	if _, _, err := fsys.OpenFile("abs-alias.txt"); err == nil {
+		t.Error("absolute symlink should be refused by os.Root, want error")
+	}
 }
 
 func TestOpenFileInsideRoot(t *testing.T) {

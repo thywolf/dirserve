@@ -43,13 +43,15 @@ jobs:
           go-version: ${{ matrix.go }}
           check-latest: true
 
-      - name: Cache modules and build cache
+      # No dependencies means no go.sum to hash, so key on go.mod and the Go
+      # version; actions/cache warns if the hashFiles pattern matches nothing.
+      - name: Cache the build cache
         uses: actions/cache@v4
         with:
           path: |
             ~/.cache/go-build
             ~/go/pkg/mod
-          key: ${{ runner.os }}-go-${{ matrix.go }}-${{ hashFiles('**/go.sum') }}
+          key: ${{ runner.os }}-go-${{ matrix.go }}-${{ hashFiles('**/go.mod') }}
           restore-keys: ${{ runner.os }}-go-${{ matrix.go }}-
 
       - name: gofmt must be clean
