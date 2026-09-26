@@ -1,214 +1,203 @@
 # dirserve
 
-Turn any directory into a readable HTTP endpoint. `curl -fsSL` a file from it
-and the bytes arrive; open the same URL in a browser and you get a small, fast,
-read-only file browser with previews. One static binary, no dependencies, no
-database, no accounts — and no way to write, upload, edit or delete anything,
-by construction rather than by policy.
+A folder, on HTTP, read-only.
 
-Built for the `curl | bash` habit and for sharing a folder on a LAN, a home
-server, or a container with one bind mount.
-
-```
+```sh
 curl -fsSL http://127.0.0.1:8080/setup.sh | bash
-curl -fsSL http://127.0.0.1:8080/configs/app.conf
 ```
 
-## Quickstart
+Open the same URL in a browser and you get a file browser with previews. That's
+the whole thing: one directory made reachable, and nothing added to it.
 
-### Docker (no flags needed)
+## Why
 
-The published image serves `/data` automatically, so the volume is the only
-thing to set:
+Sometimes a script lives on your laptop and needs to be somewhere a Docker
+container or a phone can reach it. Or a build log, a `dist/` folder, some
+configs, and you'd rather not wire up an S3 bucket for the afternoon.
+
+Existing tools do this and are great at it — dufs, FileBrowser, nginx's
+autoindex. This is the smallest thing that does the piping job properly, in one
+binary you can `scp` somewhere and run.
+
+## Run it
+
+**Docker.** The image serves `/data`, so the volume is all you set:
 
 ```sh
 docker run --rm -p 8080:8080 -v "$PWD/data:/data" ghcr.io/thywolf/dirserve:latest
 ```
 
-### Docker Compose / Portainer
+**Portainer.** Paste `docker-compose.yml` into a stack. It pulls the published
+image and every setting is a variable with a working default, so it runs
+untouched — set only what you care about:
 
-`docker-compose.yml` pulls the published image and is parameterized with
-variables that all have working defaults, so it runs as-is and you only set
-what you care about. In Portainer: **Stacks → Add stack → Web editor**, paste
-the file, then define the variables under the stack's environment settings.
-
-| Variable | Default | Meaning |
+| Variable | Default | |
 | --- | --- | --- |
-| `DIRTO_SHARE` | `/srv/dirshare` | absolute path on the Docker host to share |
-| `TOKEN` | *(empty)* | bearer token; **set this in production** |
-| `HOST_PORT` | `8080` | port on the Docker host |
-| `IMAGE` | `ghcr.io/thywolf/dirserve:latest` | image to run |
-| `HIDE_DOTFILES` | `false` | hide dotfiles from listings |
-| `MAX_PREVIEW_BYTES` | `1048576` | UI inline preview cap |
-| `RESTART_POLICY` | `unless-stopped` | compose restart policy |
+| `DIRTO_SHARE` | `/srv/dirshare` | path on the Docker host to share |
+| `TOKEN` | *(empty)* | bearer token — **set this** |
+| `HOST_PORT` | `8080` | port on the host |
+| `IMAGE` | `ghcr.io/thywolf/dirserve:latest` | |
+| `HIDE_DOTFILES` | `false` | |
+| `MAX_PREVIEW_BYTES` | `1048576` | UI preview cap |
+| `RESTART_POLICY` | `unless-stopped` | |
 
 ```sh
 DIRTO_SHARE=/srv/files TOKEN=$(openssl rand -hex 32) docker compose up -d
 ```
 
-On Windows Docker Desktop, use a drive path for `DIRTO_SHARE`, e.g.
+On Windows Docker Desktop, `DIRTO_SHARE` wants a drive path — `C:/Users/me/share`.
 
-### Bare binary
-
-```sh
-go build -o dirserve ./cmd/dirserve   # or: make build
-./dirserve                            # serves the current directory
-./dirserve --root /srv/files --addr 127.0.0.1:9000
-```
-
-Go 1.25+ is required (`os.Root` is the confinement mechanism). There are no
-third-party dependencies: `go.mod` has no `require` entries, and the UI is
-embedded in the binary.
-
-### Which directory gets served?
-
-Resolved in this order, and printed in the startup line so the choice is always
-visible:
-
-1. `--root DIR`
-2. `$DIRSERVE_ROOT`
-3. `/data`, if it exists and is a directory (this is what a Docker volume
-   creates — so containers need no configuration at all)
-4. `.`
-
-If the resolved root does not exist or is not a directory, dirserve exits
-non-zero immediately rather than serving an empty surprise.
-
-## URL rules
-
-There are **no reserved paths**. No `/api`, no `/healthz`, no prefixes. A
-directory named `api` is a directory like any other, and a file named `healthz`
-downloads like any other. What you get depends only on `Accept` and one query
-parameter.
-
-### Files — the bytes, always
+**A binary.** Go 1.25+ (for `os.Root`), nothing else:
 
 ```sh
-curl -fsSL http://127.0.0.1:8080/setup.sh
-curl -fsSL http://127.0.0.1:8080/setup.sh?dl=1     # force a download
-curl -fsS -H 'Range: bytes=0-1023' …               # 206, for seeking and resume
+go build -o dirserve ./cmd/dirserve
+./dirserve --root /srv/files
 ```
 
-Files support `Range`, `If-Modified-Since` (304) and `ETag`, so video seeking
-and resumable downloads work. A 3 GB file streams; it is never buffered whole.
+Leave `--root` off and it serves the working directory. The startup line always
+tells you which directory it picked:
 
-### Directories — pick your representation with `Accept`
+```
+dirserve serving /srv/files at http://127.0.0.1:8080
+```
 
-| Request | Response |
+## Using it
+
+Files are just files at their own URL. No prefix, no endpoint, no token in the
+path:
+
+```sh
+curl -fsSL http://127.0.0.1:8080/configs/app.conf
+curl -fsSL 'http://127.0.0.1:8080/notes.txt?dl=1'   # force a download
+curl -fsS -H 'Range: bytes=0-1023' http://127.0.0.1:8080/video.mp4
+```
+
+Range requests, `If-Modified-Since` and `ETag` all work, so seeking in a video
+and resuming a `curl` both behave. A 3 GB file streams; it never lands in
+memory.
+
+Directories are where it gets interesting, because the same URL gives you three
+different things depending on `Accept`:
+
+| | |
 | --- | --- |
-| `Accept: text/html` | the web UI (also the zero-JS plain listing) |
+| `Accept: text/html` | the web UI |
 | `Accept: application/json` | `{"path":…,"entries":[{"name","type","size","mtime_unix"}]}` |
-| anything else, or none | plain text, one name per line, `dir/` for directories |
+| anything else | one name per line, `dir/` for directories |
+
+That last one is why it's useful to scripts:
 
 ```sh
-curl http://127.0.0.1:8080/                       # a pipeable name list
-curl -fsSL http://127.0.0.1:8080/ | grep setup
-curl -fsSL -H 'Accept: application/json' http://127.0.0.1:8080/
+curl http://127.0.0.1:8080/ | grep setup.sh
+curl -fsSL -H 'Accept: application/json' http://127.0.0.1:8080/ | jq .
 ```
 
-Listings are sorted directories-first, then case-insensitive bytewise, and
-capped at 5,000 entries per directory (`"truncated": true` beyond that).
+Listings put directories first, then case-insensitive, capped at 5,000 entries.
 
-### Health check
+### No reserved paths
 
-There is no health endpoint. The root answering `200` *is* the health check:
+There's no `/api`, no `/healthz`, no magic prefix. A directory called `api` is
+a directory, and a file called `healthz` is a file. What you get depends on
+`Accept` and `?dl=1` — never on the path.
+
+Which also means the health check is just the root answering:
 
 ```sh
 curl -fsS http://127.0.0.1:8080/ >/dev/null && echo up
 ```
 
-## CLI and environment
+## Flags
 
 ```
 dirserve [--root DIR] [--addr HOST:PORT] [--hidden] [--token T]
          [--max-preview-bytes N] [--quiet] [--version]
 ```
 
-| Flag | Env | Default | Meaning |
+| Flag | Env | Default | |
 | --- | --- | --- | --- |
-| `--root` | `DIRSERVE_ROOT` | `/data` if present, else `.` | directory to serve |
+| `--root` | `DIRSERVE_ROOT` | see below | directory to serve |
 | `--addr` | `DIRSERVE_ADDR` | `127.0.0.1:8080` | listen address |
-| `--hidden` | `DIRSERVE_HIDDEN` | off | hide dotfiles and refuse to serve them |
-| `--token` | `DIRSERVE_TOKEN` | none | require `Authorization: Bearer <token>` |
-| `--max-preview-bytes` | `DIRSERVE_MAX_PREVIEW_BYTES` | `1048576` | largest inline preview |
-| `--quiet` | — | off | do not log requests |
-| `--version` | — | — | print version and exit |
+| `--hidden` | `DIRSERVE_HIDDEN` | off | hide dotfiles, refuse to serve them |
+| `--token` | `DIRSERVE_TOKEN` | none | require a bearer token |
+| `--max-preview-bytes` | `DIRSERVE_MAX_PREVIEW_BYTES` | `1048576` | UI preview cap |
+| `--quiet` | — | off | don't log requests |
 
-Flags beat environment variables, which beat defaults. There is no config file.
-Startup prints one line:
+Flags beat env, env beats defaults. No config file.
 
-```
-dirserve serving /srv/files at http://127.0.0.1:8080
-```
+The root resolves in this order: `--root`, then `DIRSERVE_ROOT`, then `/data` if
+it exists (which is what a Docker volume makes, so containers need no
+configuration), then the working directory. A missing root exits immediately
+rather than serving an empty directory and letting you wonder why.
 
 ## Security
 
-- **Read-only by construction.** Only `GET` and `HEAD` exist; everything else is
-  `405`. The process never writes to the served directory.
-- **No content can execute in the browser.** Every file response carries
-  `X-Content-Type-Options: nosniff` and `Content-Security-Policy: sandbox`, and
-  HTML/HTM/SVG/XML/templating files are served as `application/octet-stream`. A
-  `payload.html` in your directory downloads as an opaque blob.
-- **Paths are confined.** All filesystem access goes through one `os.Root`
-  chokepoint. `..`, percent-encoded traversal, NUL and control characters are
-  rejected before any syscall, and symlinks that leave the root fail to resolve.
-- **UI responses are locked down** with a same-origin CSP, `nosniff` and
-  `Referrer-Policy: no-referrer`; there is no inline script or style.
-- **Optional token.** With `--token`, every request needs
-  `Authorization: Bearer <t>`, and file URLs also accept `?access_token=<t>` so
-  a command copied out of the UI works in curl. Compared in constant time.
-- **Bind policy.** The default bind is loopback. A non-loopback bind without a
-  token is allowed (containers rely on it) but prints a loud warning at startup.
+Read-only isn't a setting here. Only `GET` and `HEAD` exist; every other verb
+is `405`. The process never writes to the directory it serves.
 
-> **Do not expose this to the internet without a token.** It is designed for a
-> laptop, a LAN, or behind your own reverse proxy. Anyone who can reach the port
-> can read the entire tree, and that is the entire feature.
+Served files can't run anything in your browser. Every file response carries
+`X-Content-Type-Options: nosniff` and `Content-Security-Policy: sandbox`, and
+HTML, SVG, XML and templating files are served as `application/octet-stream` —
+a `payload.html` in the directory downloads as an opaque blob.
 
-## Container image and CI
+Paths can't escape the root. All filesystem access goes through one `os.Root`.
+`..`, percent-encoded traversal, NUL bytes and control characters are rejected
+before any syscall, and symlinks pointing outside the root fail to resolve.
 
-The image is published to GitHub Container Registry by
-`.github/workflows/ci.yml`:
+With `--token`, every request needs `Authorization: Bearer <t>`. File URLs also
+accept `?access_token=<t>` so a command you copy out of the UI works in curl.
+The comparison is constant-time.
 
-- On every push to `main` and on `v*` tags, CI runs `gofmt`, `go vet`, the unit
-  and integration tests (with a coverage floor), and the `e2e.sh` acceptance
-  script on Go 1.25 and the latest stable.
-- Only if all of that passes does the `docker` job build and push the image.
-  A failing test can therefore never produce a published `latest` tag.
-- Pull requests build the image but do not push it, and additionally assert that
-  the image is under 10 MB, runs as non-root, and actually serves a mounted
-  directory.
-- Tags pushed to `v1.2.3` become `ghcr.io/thywolf/dirserve:1.2.3` (and
-  `sha-<short>`), with `latest` reserved for the default branch.
+The default bind is loopback. Binding to anything wider without a token is
+allowed — containers need it — but it prints a warning at startup, and it means
+exactly what it says.
 
-The image is `FROM scratch` with a single static binary, so it has no shell, no
-package manager, and no writable filesystem.
+> Anyone who can reach the port can read the whole tree. That's the product.
+> Put it on a LAN, a VPN, or behind something that terminates TLS, and give it a
+> token if it's not just you.
+
+## How it's built
+
+976 lines of Go, standard library only — `go.mod` has no `require` block and a
+test enforces it. The UI is about 1500 lines of HTML/CSS/JS embedded in the
+binary, served as real files so the CSP can forbid inline script and style.
+
+Two decisions do most of the work:
+
+**One filesystem chokepoint.** `internal/fsx` holds the only `*os.Root` in the
+program. Every open, stat and listing goes through it, so confinement is
+structural rather than a rule someone has to remember at each call site.
+
+**Negotiation instead of an API.** The UI has no private endpoint to call — it
+fetches the same directory URLs you do, with `Accept: application/json`. The
+number of paths that mean something special is zero, which is why a directory
+named `api` isn't a problem.
+
+47 tests, plus `e2e.sh`: 29 assertions against a real server with real curl,
+covering the piping contract, all three representations, traversal and symlink
+confinement, `Range`, `?dl=1`, method rejection and token mode.
+
+## CI
+
+Every push to `main` and every `v*` tag runs `gofmt`, `go vet`, the tests with
+a coverage floor, and `e2e.sh` on Go 1.25 and stable. The image is only built
+if all of that passes, so a broken build can't publish a tag. After a
+successful push, a webhook tells your deployment to pull the new image.
+
+Pull requests build the image without pushing it, and additionally check that
+it's under 10 MB, runs as non-root, and actually serves a mounted directory.
+
+The published image is `FROM scratch`: 3.6 MB, no shell, no package manager,
+no writable filesystem.
 
 ## Contributing
 
 ```sh
-gofmt -w .          # keep the tree gofmt-clean; CI enforces it
-go test ./...       # unit and integration tests
-./e2e.sh            # full HTTP contract acceptance run
+gofmt -w .
+go test ./...
+./e2e.sh
 ```
 
-## Design
+No new dependencies, and no new files reaching the filesystem outside
+`internal/fsx`. `AGENTS.md` has the reasoning.
 
-```
-dirserve
-├── cmd/dirserve/main.go     flags, env, root resolution, graceful shutdown
-├── internal/fsx/            the only filesystem access: os.Root, listing, sniffing
-├── internal/server/         one handler: negotiate, then serve a file or a dir
-└── assets/                  index.html, style.css, app.js (embedded)
-```
-
-Two ideas carry the design:
-
-1. **One filesystem chokepoint.** Every open, stat and listing goes through
-   `internal/fsx`, which holds the `os.Root`. Path safety is a property of the
-   code's shape, not of remembering to check at each call site.
-2. **Negotiation instead of an API.** There is no private endpoint for the UI to
-   call. The UI fetches the same directory URLs you do, with
-   `Accept: application/json`. The number of paths that mean something special
-   is therefore zero, and a directory called `api` is not a special directory.
-
-Read-only, tiny, and hard to misuse. MIT licensed.
+MIT.
