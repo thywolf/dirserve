@@ -239,7 +239,11 @@ jobs:
           esac
 
           # The container must answer the root health check on a mounted dir.
+          # The image runs as uid 65532, and mktemp -d creates the directory
+          # 0700 owned by the runner user — without the chmod the server
+          # inside cannot read its own served directory and exits.
           serve_dir="$(mktemp -d)"
+          chmod 0755 "$serve_dir"
           printf 'hello-from-container\n' > "$serve_dir/hello.txt"
           docker run -d --name dirserve-test -p 8080:8080 \
             -v "$serve_dir:/data:ro" "$IMAGE" >/dev/null

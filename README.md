@@ -32,6 +32,11 @@ binary you can `scp` somewhere and run.
 docker run --rm -p 8080:8080 -v "$PWD/data:/data" ghcr.io/thywolf/dirserve:latest
 ```
 
+The container runs as a non-root uid (65532 in the published image), so the
+served directory must be readable by it — a root-owned `0700` directory makes
+the server exit at startup with `open /data: permission denied`. `chmod o+rx`
+on the directory fixes it.
+
 **Portainer.** Paste `docker-compose.yml` into a stack. It pulls the published
 image and every setting is a variable with a working default, so it runs
 untouched — set only what you care about:
