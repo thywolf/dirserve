@@ -1,0 +1,15 @@
+# Keep the pinned GitHub Actions current: runners deprecate Node versions and
+# action majors age out, which otherwise only surfaces as CI warnings. There is
+# deliberately no other ecosystem to scan — go.mod has no dependencies (a test
+# enforces it), and the standard library is covered by govulncheck in CI.
+version: 2
+updates:
+  - package-ecosystem: github-actions
+    directory: /
+    schedule:
+      interval: weekly
+    # One combined PR keeps the noise at a single weekly review at most.
+    groups:
+      actions:
+        patterns:
+          - "*"
