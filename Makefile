@@ -11,11 +11,26 @@ SHELL := /bin/sh
 
 .DEFAULT_GOAL := build
 
-.PHONY: build test vet fmt fmt-check e2e image clean run
+PLATFORMS := linux-amd64 linux-arm64 darwin-amd64 darwin-arm64 windows-amd64
+
+.PHONY: build test vet fmt fmt-check e2e release image clean run
 
 ## build: compile the single static binary to ./dirserve
 build:
 	CGO_ENABLED=0 go build $(GOFLAGS) -ldflags '$(LDFLAGS)' -o $(BINARY) ./cmd/dirserve
+
+## release: cross-compile static binaries for the release platforms into ./dist
+## (kept in step with the ci.yml `release` job, which attaches them to tags)
+release:
+	mkdir -p dist
+	for platform in $(PLATFORMS); do \
+		os=$${platform%%-*}; arch=$${platform##*-}; \
+		out=dist/$(BINARY)-$${platform}; \
+		if [ "$$os" = "windows" ]; then out=$${out}.exe; fi; \
+		CGO_ENABLED=0 GOOS=$$os GOARCH=$$arch go build $(GOFLAGS) \
+			-ldflags '$(LDFLAGS)' -o $$out ./cmd/dirserve || exit 1; \
+	done
+	sha256sum dist/$(BINARY)-* > dist/SHA256SUMS
 
 ## test: run every unit and integration test
 test:
@@ -52,3 +67,4 @@ run: build
 ## clean: remove build output
 clean:
 	rm -f $(BINARY)
+	rm -rf dist

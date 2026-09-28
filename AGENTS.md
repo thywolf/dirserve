@@ -181,6 +181,12 @@ misreport a good build as broken.
 `docker-compose.yml` pulls the image; it never builds. Every setting is a
 `${VAR:-default}` so the stack runs in Portainer without edits.
 
+Version tags also cut a GitHub Release with static binaries: the `release`
+job (`needs: test`) cross-compiles linux/amd64, linux/arm64, darwin/amd64,
+darwin/arm64 and windows/amd64 with CGO off, stamps `--version`, and attaches
+them with a SHA256SUMS file. The platform list lives in the ci.yml `release`
+job and mirrors the Makefile's `release` target — change both together.
+
 ## Things that are deliberately not here
 
 No auth beyond the optional bearer token, no TLS, no database, no caching

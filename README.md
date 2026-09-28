@@ -52,7 +52,17 @@ DIRTO_SHARE=/srv/files TOKEN=$(openssl rand -hex 32) docker compose up -d
 
 On Windows Docker Desktop, `DIRTO_SHARE` wants a drive path — `C:/Users/me/share`.
 
-**A binary.** Go 1.25+ (for `os.Root`), nothing else:
+**A binary.** Each release publishes static binaries — no Go needed:
+
+```sh
+curl -fsSLO https://github.com/thywolf/dirserve/releases/latest/download/dirserve-linux-amd64
+chmod +x dirserve-linux-amd64
+./dirserve-linux-amd64 --root /srv/files
+```
+
+Binaries exist for linux/amd64, linux/arm64, darwin/amd64, darwin/arm64 and
+windows/amd64, each stamped with its version, with a SHA256SUMS file beside
+them. To build instead: Go 1.25+ (for `os.Root`), nothing else:
 
 ```sh
 go build -o dirserve ./cmd/dirserve
@@ -193,6 +203,8 @@ Every push to `main` and every `v*` tag runs `gofmt`, `go vet`, the tests with
 a coverage floor, and `e2e.sh` on Go 1.25 and stable. The image is only built
 if all of that passes, so a broken build can't publish a tag. After a
 successful push, a webhook tells your deployment to pull the new image.
+Version tags also cut a GitHub Release with static binaries for the five
+common platforms and a SHA256SUMS file.
 
 Pull requests build the image without pushing it, and additionally check that
 it's under 10 MB, runs as non-root, and actually serves a mounted directory.

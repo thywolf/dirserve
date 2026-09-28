@@ -18,6 +18,12 @@ coverage.*
 /data
 /data/
 
+# ---- release output -------------------------------------------------------
+# Local cross-compile output from `make release`. The CI job builds the same
+# set into its own workspace, never the repository.
+/dist
+/dist/
+
 # ---- scratch ---------------------------------------------------------------
 # Throwaway fixtures and test binaries. Kept out of the index because Go
 # walks the whole module for ./... : a stray Go file or fixture tree under
