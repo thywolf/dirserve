@@ -43,7 +43,7 @@ const svg = (d) =>
 const ICON = {
   dir: svg('<path d="M2 4.6A1.3 1.3 0 0 1 3.3 3.3h2.6l1.3 1.5h5.5A1.3 1.3 0 0 1 14 6.1v5.6a1.3 1.3 0 0 1-1.3 1.3H3.3A1.3 1.3 0 0 1 2 11.7z"/>'),
   file: svg('<path d="M4 2.6h4.4L12 6.2v7.2a1 1 0 0 1-1 1H4a1 1 0 0 1-1-1V3.6a1 1 0 0 1 1-1z"/><path d="M8.3 2.7v3.4H12"/>'),
-  chevron: svg('<path d="m6.2 3.6 4 4.4-4 4.4"/>'),
+  chevron: svg('<path d="m6.3 3.6 4 4.4-4 4.4"/>'),
   copy: svg('<rect x="5.4" y="5.4" width="8" height="8" rx="1.6"/><path d="M10.6 5.4V4A1.6 1.6 0 0 0 9 2.4H4A1.6 1.6 0 0 0 2.4 4v5A1.6 1.6 0 0 0 4 10.6h1.4"/>'),
   download: svg('<path d="M8 2.4v7.2m0 0 2.6-2.6M8 9.6 5.4 7"/><path d="M2.6 11v1.4a1.2 1.2 0 0 0 1.2 1.2h8.4a1.2 1.2 0 0 0 1.2-1.2V11"/>'),
   link: svg('<path d="M6.6 9.4a2.6 2.6 0 0 0 3.9.3l1.8-1.8a2.6 2.6 0 1 0-3.7-3.7l-1 1"/><path d="M9.4 6.6a2.6 2.6 0 0 0-3.9-.3L3.7 8.1a2.6 2.6 0 1 0 3.7 3.7l1-1"/>'),
@@ -187,11 +187,16 @@ function makeRow(node) {
   row.style.paddingLeft = 8 + node.depth * 14 + "px";
   row.setAttribute("role", "treeitem");
 
-  // Indentation guides: one hairline per ancestor level.
+  // Indentation guides: one hairline per ancestor level. The rail sits at an
+  // integer offset (crisp 1px line) chosen so it passes just left of the
+  // ancestor's chevron glyph: the glyph's painted centre is 0.76px right of
+  // the rail's centre line, the balance tuned by eye against the 14px indent
+  // step. Children hang from their parent's chevron; a row's own icons start
+  // 7px right of its nearest rail.
   for (let d = 1; d <= node.depth; d++) {
     const rail = document.createElement("span");
     rail.className = "rail";
-    rail.style.left = 8 + (d - 1) * 14 + 14 + "px";
+    rail.style.left = 8 + (d - 1) * 14 + 6 + "px";
     row.appendChild(rail);
   }
 

@@ -490,6 +490,17 @@ html[data-theme="dark"] .tbtn .moon { display: none; }
 .row .ico { flex: none; width: 15px; height: 15px; color: var(--faint); }
 .row.dir .ico, .row.selected .ico { color: var(--accent); }
 
+/* Row icons are inline elements by default, so they sit on the text baseline
+   — ~1.3px below their box inside the 1.55 line height. On open directories
+   the twist's rotate(90deg) turns that vertical offset into a horizontal one,
+   which is why the fold guides missed the chevron tips. Block them and fill
+   their box exactly instead. */
+.row .twist svg, .row .ico svg, .dirlist .row .go svg {
+  display: block;
+  width: 100%;
+  height: 100%;
+}
+
 /* Family tints, kept after the selected/accent rules so a selected file keeps
    its own colour: one fixed hue per kind, pulled toward the text colour so it
    settles into whichever palette is active. */
@@ -532,10 +543,13 @@ html[data-theme="dark"] .tbtn .moon { display: none; }
   font-style: normal;
 }
 
-/* Indentation guides: one hairline per level, behind the row. */
+/* Indentation guides: one hairline per ancestor level, behind the row.
+   Full row height, so the segments of adjacent rows join into one
+   continuous line down a subtree — and stop where it ends, because
+   shallower rows draw no rail for it. */
 .row .rail {
   position: absolute;
-  top: 3px; bottom: 3px;
+  top: 0; bottom: 0;
   width: 1px;
   background: var(--border);
   pointer-events: none;
