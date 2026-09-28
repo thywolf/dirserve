@@ -40,7 +40,7 @@ e2e.sh                  end-to-end acceptance: real server, real curl
 .github/workflows/ci.yml
 ```
 
-About 1400 lines of non-test Go and 1700 lines of assets.
+About 1400 lines of non-test Go and 2100 lines of assets.
 
 ## Commands
 
@@ -85,9 +85,16 @@ whole HTTP contract stayed green. Layout changes need a real viewport check.
   auto column sizes to its widest row's min-content, so one long filename in
   the topbar or the pane widens the whole document and the page pans sideways
   on a phone. `.app` has the same trap with its *implicit* column, which is why
-  it is declared explicitly. The same reasoning puts `min-width: 0` on
-  `.root span`: a flex item floors at its content width, so without it the
-  served-path pill refuses to ellipsize and re-breaks the topbar.
+  it is declared explicitly. So does `.main`, whose auto column an unbreakable
+  breadcrumb grows — declared for the same reason. The same reasoning puts
+  `min-width: 0` on `.root span`: a flex item floors at its content width, so
+  without it the served-path pill refuses to ellipsize and re-breaks the topbar.
+- **The theme is one attribute and two palettes.** Light and dark are each
+  defined once as prefixed tokens at the top of `style.css` and mapped onto the
+  live names by the theme rules there: no attribute means "follow the OS", and
+  `documentElement.dataset.theme` (owned by the theme block in `app.js`,
+  persisted in localStorage) pins an explicit choice. Do not fork palette
+  values into component rules, and do not add a third source of truth.
 - **Everything from the filesystem reaches the DOM via `textContent`.** A
   filename is attacker-controlled. The only `innerHTML` calls in `app.js` write
   icon strings defined in that same file.

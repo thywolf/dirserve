@@ -11,7 +11,8 @@ the whole thing: one directory made reachable, and nothing added to it.
 
 It works on a phone. Below 760px the tree becomes a slide-over drawer and the
 preview takes the whole screen, so a link pasted into a phone browser is usable
-without pinching to zoom.
+without pinching to zoom. Light and dark follow the system, with a toggle in
+the top bar that remembers the choice.
 
 ## Why
 
@@ -168,7 +169,7 @@ exactly what it says.
 ## How it's built
 
 1400 lines of Go, standard library only — `go.mod` has no `require` block and a
-test enforces it. The UI is about 1700 lines of HTML/CSS/JS embedded in the
+test enforces it. The UI is about 2100 lines of HTML/CSS/JS embedded in the
 binary, served as real files so the CSP can forbid inline script and style.
 
 Two decisions do most of the work:

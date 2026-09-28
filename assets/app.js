@@ -15,6 +15,7 @@ const ui = {
   head: el("head"), crumb: el("crumb"), meta: el("meta"),
   actions: el("actions"), pane: el("pane"),
   drawer: el("btn-drawer"), back: el("btn-back"), scrim: el("scrim"),
+  theme: el("btn-theme"), filterClear: el("filter-clear"),
   sidebar: document.querySelector(".sidebar"),
 };
 
@@ -41,7 +42,44 @@ const ICON = {
   copy: svg('<rect x="5.4" y="5.4" width="8" height="8" rx="1.6"/><path d="M10.6 5.4V4A1.6 1.6 0 0 0 9 2.4H4A1.6 1.6 0 0 0 2.4 4v5A1.6 1.6 0 0 0 4 10.6h1.4"/>'),
   download: svg('<path d="M8 2.4v7.2m0 0 2.6-2.6M8 9.6 5.4 7"/><path d="M2.6 11v1.4a1.2 1.2 0 0 0 1.2 1.2h8.4a1.2 1.2 0 0 0 1.2-1.2V11"/>'),
   link: svg('<path d="M6.6 9.4a2.6 2.6 0 0 0 3.9.3l1.8-1.8a2.6 2.6 0 1 0-3.7-3.7l-1 1"/><path d="M9.4 6.6a2.6 2.6 0 0 0-3.9-.3L3.7 8.1a2.6 2.6 0 1 0 3.7 3.7l1-1"/>'),
+  // One glyph per file family, so a listing scans by shape before size.
+  image: svg('<rect x="2.5" y="3.5" width="11" height="9" rx="1.5"/><circle cx="6" cy="6.6" r="1.1"/><path d="m4.5 10.8 2.3-2.3 1.9 1.9 1.9-1.9 1.9 1.9"/>'),
+  video: svg('<rect x="2.5" y="3.5" width="11" height="9" rx="1.5"/><path d="M7 6.1v3.8L10.2 8z"/>'),
+  audio: svg('<path d="M6.6 11.4V4.2l4.8-1v7.2"/><circle cx="5" cy="11.4" r="1.6"/><circle cx="9.8" cy="10.4" r="1.6"/>'),
+  pdf: svg('<path d="M4 2.6h4.4L12 6.2v7.2a1 1 0 0 1-1 1H4a1 1 0 0 1-1-1V3.6a1 1 0 0 1 1-1z"/><path d="M8.3 2.7v3.4H12"/><path d="M5.7 10.7h2.6c1.6 0 1.6-2.4 0-2.4H5.7"/>'),
+  archive: svg('<rect x="2.5" y="2.8" width="11" height="3" rx="0.8"/><path d="M3.6 5.8v6.4a1 1 0 0 0 1 1h6.8a1 1 0 0 0 1-1V5.8"/><path d="M6.5 8.4h3"/>'),
+  code: svg('<path d="m5.6 5.2-2.9 2.8 2.9 2.8M10.4 5.2l2.9 2.8-2.9 2.8"/>'),
+  data: svg('<path d="M6.2 2.9c-1.6 0-2.1.8-2.1 2v1.5c0 .8-.4 1.3-1.3 1.6.9.3 1.3.8 1.3 1.6v1.5c0 1.2.5 2 2.1 2"/><path d="M9.8 2.9c1.6 0 2.1.8 2.1 2v1.5c0 .8.4 1.3 1.3 1.6-.9.3-1.3.8-1.3 1.6v1.5c0 1.2-.5 2-2.1 2"/>'),
+  doc: svg('<path d="M4 2.6h4.4L12 6.2v7.2a1 1 0 0 1-1 1H4a1 1 0 0 1-1-1V3.6a1 1 0 0 1 1-1z"/><path d="M8.3 2.7v3.4H12"/><path d="M5.7 8.2h4.6M5.7 10.4h3.2"/>'),
 };
+
+// Which glyph a file gets. The server's content-type policy stays the authority
+// for what a file *is*; this only decides how the name is drawn.
+const FAM_BY_EXT = {
+  png: "image", jpg: "image", jpeg: "image", gif: "image", webp: "image",
+  avif: "image", bmp: "image", ico: "image", svg: "image",
+  mp4: "video", webm: "video", mov: "video", mkv: "video", avi: "video",
+  mp3: "audio", wav: "audio", flac: "audio", ogg: "audio", m4a: "audio", opus: "audio",
+  pdf: "pdf",
+  zip: "archive", gz: "archive", tar: "archive", xz: "archive", zst: "archive",
+  "7z": "archive", bz2: "archive", rar: "archive",
+  go: "code", rs: "code", c: "code", h: "code", cpp: "code", java: "code",
+  rb: "code", py: "code", js: "code", mjs: "code", ts: "code", tsx: "code",
+  jsx: "code", sh: "code", bash: "code", zsh: "code", fish: "code", ps1: "code",
+  sql: "code", lua: "code", php: "code", pl: "code", swift: "code", kt: "code",
+  json: "data", yaml: "data", yml: "data", toml: "data", xml: "data",
+  csv: "data", tsv: "data", lock: "data", conf: "data", ini: "data", env: "data",
+  md: "doc", txt: "doc", log: "doc", rst: "doc", text: "doc",
+};
+
+// iconFor picks the glyph for a name: directories are folders, files get their
+// family's icon, and anything unknown falls back to the plain file shape.
+function iconFor(name, isDir) {
+  if (isDir) return { html: ICON.dir, fam: "" };
+  const dot = name.lastIndexOf(".");
+  const fam = dot > 0 ? FAM_BY_EXT[name.slice(dot + 1).toLowerCase()] || "" : "";
+  return { html: fam ? ICON[fam] : ICON.file, fam };
+}
 
 // ------------------------------------------------------------- helpers ----
 
@@ -150,9 +188,10 @@ function makeRow(node) {
   const twist = document.createElement("span");
   twist.className = "twist" + (node.isDir ? "" : " hide");
   twist.innerHTML = ICON.chevron;
+  const icon = iconFor(node.name, node.isDir);
   const ico = document.createElement("span");
-  ico.className = "ico";
-  ico.innerHTML = node.isDir ? ICON.dir : ICON.file;
+  ico.className = "ico" + (icon.fam ? " fam-" + icon.fam : "");
+  ico.innerHTML = icon.html;
   const label = document.createElement("span");
   label.className = "name";
   label.textContent = node.name;
@@ -283,30 +322,40 @@ async function show(path, replace) {
   renderTree();
   // Once the user has actually opened something, the root shows its listing
   // rather than the welcome state again.
-  if (path !== "") ui.root.dataset.touched = "1";
+  // The head ships hidden and only appears with a real selection: on the
+  // untouched root the welcome state is the whole show, and a one-glyph
+  // breadcrumb above it is noise, not navigation.
+  if (path !== "") {
+    ui.root.dataset.touched = "1";
+    ui.head.hidden = false;
+  }
   ui.pane.scrollTop = 0;
   // A tap on a row inside the drawer navigates, and the preview is what the
   // user came for, so the drawer closes and the pane reclaims the screen.
   if (narrow.matches) setDrawer(false);
-  // The head ships hidden, but the breadcrumb is the only way back up the
-  // tree, so it appears as soon as anything is selected.
-  ui.head.hidden = false;
   renderHead(path);
 
   const node = nodes.get(path);
   const isDir = path === "" || !!(node && node.isDir);
 
+  // Every render wraps its content in one .view element: it gives the pane's
+  // children a definite height to fill (so a short text file's background
+  // covers the pane instead of stopping after the last line) and a single
+  // place for the navigation transition.
+  const view = document.createElement("div");
+  view.className = "view";
+
   // The pane is cleared on every navigation, so the welcome state is built here
   // rather than shipped as static markup that the first render throws away.
   if (path === "" && !ui.root.dataset.touched) {
-    ui.pane.replaceChildren(welcome());
+    view.appendChild(welcome());
+    ui.pane.replaceChildren(view);
     return;
   }
 
-  const body = document.createElement("div");
-  ui.pane.replaceChildren(body);
-  if (isDir) renderDir(body, path, node);
-  else await renderFile(body, path, node);
+  ui.pane.replaceChildren(view);
+  if (isDir) renderDir(view, path, node);
+  else await renderFile(view, path, node);
 }
 
 // The welcome state: what this is, and how to drive it. Built in JS because the
@@ -327,11 +376,34 @@ function welcome() {
   const lead = document.createElement("p");
   lead.textContent = "Pick a file to preview it here, or take the whole tree from a shell:";
 
-  const cmd = document.createElement("p");
+  // The command is the product — clicking it copies it, so the shell one-liner
+  // never has to be re-typed.
+  const cmd = document.createElement("button");
+  cmd.type = "button";
+  cmd.className = "curlchip";
+  cmd.title = "Copy";
+  cmd.setAttribute("aria-label", "Copy the curl command for this directory");
   const code = document.createElement("code");
   code.textContent = "curl -fsSL " + absUrl("") + "…";
   cmd.appendChild(code);
+  cmd.addEventListener("click", async () => {
+    const full = "curl -fsSL " + absUrl("") + (auth() ? "?" + auth() : "");
+    try {
+      await navigator.clipboard.writeText(full);
+      cmd.classList.add("done");
+      setTimeout(() => cmd.classList.remove("done"), 1200);
+    } catch {
+      window.prompt("Copy command", full);
+    }
+  });
 
+  d.append(glyph, title, lead, cmd);
+  // A phone has no keyboard; the legend would advertise keys it cannot use.
+  if (!narrow.matches) d.append(keyLegend());
+  return d;
+}
+
+function keyLegend() {
   const keys = document.createElement("p");
   keys.className = "keys";
   for (const [combo, label] of [["/", "filter"], ["↑ ↓", "move"], ["↵", "open"], ["esc", "clear"]]) {
@@ -344,9 +416,7 @@ function welcome() {
     span.appendChild(document.createTextNode(" " + label));
     keys.appendChild(span);
   }
-
-  d.append(glyph, title, lead, cmd, keys);
-  return d;
+  return keys;
 }
 
 function blank(host, icon, title, text) {
@@ -391,17 +461,17 @@ function renderDir(host, path, node) {
   // A heading gives the pane a title when it is showing a directory, so the
   // eye has somewhere to land before the rows start.
   const label = document.createElement("div");
-  label.className = "row note";
-  label.style.padding = "0 16px 6px";
+  label.className = "dirlabel";
   label.textContent = kids.length + (kids.length === 1 ? " item" : " items");
   list.appendChild(label);
 
   for (const child of kids) {
     const row = document.createElement("div");
     row.className = "row " + (child.isDir ? "dir" : "file");
+    const icon = iconFor(child.name, child.isDir);
     const ico = document.createElement("span");
-    ico.className = "ico";
-    ico.innerHTML = child.isDir ? ICON.dir : ICON.file;
+    ico.className = "ico" + (icon.fam ? " fam-" + icon.fam : "");
+    ico.innerHTML = icon.html;
     const name = document.createElement("span");
     name.className = "name";
     name.textContent = child.name;
@@ -485,8 +555,15 @@ function renderMedia(host, tag, url, alt) {
   const wrap = document.createElement("div");
   wrap.className = "media";
   const m = document.createElement(tag);
-  if (tag === "img") m.alt = alt;
-  else m.controls = true;
+  if (tag === "img") {
+    m.alt = alt;
+    // A directory of images previews one at a time; a lazy decode keeps the
+    // browser from doing work for pixels that are already scrolled past.
+    m.loading = "lazy";
+    m.decoding = "async";
+  } else {
+    m.controls = true;
+  }
   m.preload = "metadata";
   m.src = url;
   wrap.appendChild(m);
@@ -563,6 +640,10 @@ function renderHead(path) {
 
   ui.actions.replaceChildren();
   if (!isDir) ui.actions.append(copyBtn(path), rawBtn(path), dlBtn(path));
+
+  // When the path does not fit, the overflow clips silently at the start edge;
+  // a left fade says "there is more above" instead of a hard mid-word cut.
+  ui.crumb.classList.toggle("clipped", ui.crumb.scrollWidth > ui.crumb.clientWidth);
 }
 
 function copyBtn(path) {
@@ -634,6 +715,57 @@ ui.back.addEventListener("click", () => setDrawer(false));
 ui.tree.addEventListener("click", (e) => {
   if (e.target.closest(".row.dir, .row.file")) setDrawer(false);
 });
+// ------------------------------------------------------------- theme ----
+// Light and dark are two token palettes in the CSS; which one applies is a
+// data-theme attribute on the document element. Until this module sets it, no
+// attribute exists and the palettes follow the OS preference, so the first
+// paint is always right and there is no flash when the theme is merely
+// following the system. An explicit choice is stored and wins until cleared.
+const THEME_KEY = "dirserve-theme";
+const sysDark = matchMedia("(prefers-color-scheme: dark)");
+let themeChoice = null; // null means "follow the system"
+try {
+  const saved = localStorage.getItem(THEME_KEY);
+  if (saved === "light" || saved === "dark") themeChoice = saved;
+} catch {
+  // Storage can be unavailable (private mode, hardened browsers); the toggle
+  // still works for the session, it just does not persist.
+}
+
+function applyTheme() {
+  const theme = themeChoice ?? (sysDark.matches ? "dark" : "light");
+  document.documentElement.dataset.theme = theme;
+  ui.theme.setAttribute(
+    "aria-label",
+    theme === "dark" ? "Switch to light theme" : "Switch to dark theme",
+  );
+}
+
+ui.theme.addEventListener("click", () => {
+  themeChoice = document.documentElement.dataset.theme === "dark" ? "light" : "dark";
+  try {
+    localStorage.setItem(THEME_KEY, themeChoice);
+  } catch {}
+  applyTheme();
+});
+// While following the system, a mid-session flip of the OS setting updates.
+sysDark.addEventListener("change", () => {
+  if (!themeChoice) applyTheme();
+});
+applyTheme();
+
+// The "/" hint and the clear affordance are the filter's two ends: one opens
+// it from the keyboard, the other empties it where a phone has no Escape.
+ui.filter.addEventListener("input", () => {
+  ui.filterClear.hidden = !ui.filter.value;
+});
+ui.filterClear.addEventListener("click", () => {
+  ui.filter.value = "";
+  ui.filterClear.hidden = true;
+  renderTree();
+  ui.filter.focus();
+});
+
 // Leaving the phone range must not strand a phone-only drawer on desktop.
 narrow.addEventListener("change", (e) => { if (!e.matches) setDrawer(false, true); });
 // ------------------------------------------------------------ keyboard ----

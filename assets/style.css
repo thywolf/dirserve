@@ -1,37 +1,92 @@
-/* dirserve — one accent hue, two token sets, and nothing that fights the content.
+/* dirserve — one accent hue, two palettes, and nothing that fights the content.
    The interface should feel like a well-made native app: quiet chrome, precise
-   alignment, and everything that moves moving for a reason. */
+   alignment, and everything that moves moving for a reason.
 
-/* ── tokens ──────────────────────────────────────────────────────────── */
+   Theming: each palette is defined once under a prefix and mapped onto the
+   live token names by the three theme rules that follow. The mapping flips,
+   the definitions never move — that indirection is what makes the light/dark
+   toggle cost thirty short lines instead of a second copy of every value. */
+
+/* ── palettes ────────────────────────────────────────────────────────── */
 
 :root {
   color-scheme: light dark;
 
-  /* One hue. Every accent in both themes comes from this family. */
-  --accent: #0b7d72;
-  --accent-hover: #096a61;
-  --accent-ink: #ffffff;
-  --accent-wash: rgba(11, 125, 114, 0.1);
-  --accent-wash-2: rgba(11, 125, 114, 0.16);
-  --accent-ring: rgba(11, 125, 114, 0.38);
+  /* Light palette. */
+  --l-accent: #0b7d72;
+  --l-accent-ink: #ffffff;
+  --l-accent-wash: rgba(11, 125, 114, 0.1);
+  --l-accent-wash-2: rgba(11, 125, 114, 0.16);
+  --l-bg: #f5f6f8;
+  --l-surface: #ffffff;
+  --l-surface-2: #fafbfc;
+  --l-surface-3: #f1f3f5;
+  --l-sidebar: #f2f4f6;
+  --l-border: rgba(16, 20, 28, 0.09);
+  --l-border-strong: rgba(16, 20, 28, 0.16);
+  --l-text: #101319;
+  --l-dim: #5a6270;
+  --l-faint: #6a7180;
+  --l-code-bg: #f7f8f9;
+  --l-hover: rgba(16, 20, 28, 0.045);
+  --l-scrim: rgba(10, 13, 18, 0.45);
+  --l-shadow-sm: 0 1px 2px rgba(12, 16, 24, 0.05);
+  --l-shadow-md: 0 2px 4px rgba(12, 16, 24, 0.04), 0 8px 24px -10px rgba(12, 16, 24, 0.16);
+  --l-shadow-lg: 0 4px 8px rgba(12, 16, 24, 0.05), 0 24px 56px -20px rgba(12, 16, 24, 0.26);
 
-  /* Neutrals, cool and slightly blue so the accent reads as intentional. */
-  --bg: #f6f7f8;
-  --surface: #ffffff;
-  --surface-2: #fafbfc;
-  --surface-3: #f1f3f5;
-  --sidebar: #f2f4f6;
-  --border: rgba(16, 20, 28, 0.09);
-  --border-strong: rgba(16, 20, 28, 0.16);
-  --text: #101319;
-  --dim: #5a6270;
-  --faint: #666e7c;
-  --code-bg: #f7f8f9;
+  /* Dark palette. */
+  --d-accent: #45c4b2;
+  --d-accent-ink: #04211d;
+  --d-accent-wash: rgba(69, 196, 178, 0.13);
+  --d-accent-wash-2: rgba(69, 196, 178, 0.2);
+  --d-bg: #0c0e11;
+  --d-surface: #14171b;
+  --d-surface-2: #101317;
+  --d-surface-3: #1a1e23;
+  --d-sidebar: #0f1215;
+  --d-border: rgba(255, 255, 255, 0.08);
+  --d-border-strong: rgba(255, 255, 255, 0.16);
+  --d-text: #e8ebef;
+  --d-dim: #a0a7b2;
+  --d-faint: #8d95a1;
+  --d-code-bg: #0f1216;
+  --d-hover: rgba(255, 255, 255, 0.045);
+  --d-scrim: rgba(0, 0, 0, 0.55);
+  --d-shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.4);
+  --d-shadow-md: 0 2px 4px rgba(0, 0, 0, 0.3), 0 8px 24px -10px rgba(0, 0, 0, 0.6);
+  --d-shadow-lg: 0 4px 8px rgba(0, 0, 0, 0.35), 0 24px 56px -20px rgba(0, 0, 0, 0.7);
 
-  /* Depth: a hairline plus a soft, short shadow. */
-  --shadow-sm: 0 1px 2px rgba(12, 16, 24, 0.05);
-  --shadow-md: 0 2px 4px rgba(12, 16, 24, 0.04), 0 8px 24px -10px rgba(12, 16, 24, 0.16);
-  --shadow-lg: 0 4px 8px rgba(12, 16, 24, 0.05), 0 24px 56px -20px rgba(12, 16, 24, 0.26);
+  /* The live tokens: light by default, so a no-JS page is themed correctly. */
+  --accent: var(--l-accent);
+  --accent-ink: var(--l-accent-ink);
+  --accent-wash: var(--l-accent-wash);
+  --accent-wash-2: var(--l-accent-wash-2);
+  --bg: var(--l-bg);
+  --surface: var(--l-surface);
+  --surface-2: var(--l-surface-2);
+  --surface-3: var(--l-surface-3);
+  --sidebar: var(--l-sidebar);
+  --border: var(--l-border);
+  --border-strong: var(--l-border-strong);
+  --text: var(--l-text);
+  --dim: var(--l-dim);
+  --faint: var(--l-faint);
+  --code-bg: var(--l-code-bg);
+  --hover: var(--l-hover);
+  --scrim: var(--l-scrim);
+  --shadow-sm: var(--l-shadow-sm);
+  --shadow-md: var(--l-shadow-md);
+  --shadow-lg: var(--l-shadow-lg);
+
+  /* File-family hues. They are mixed toward the text colour at the point of
+     use, so one fixed hue per family reads on both palettes. */
+  --fam-image: #8b5cf6;
+  --fam-video: #ec4899;
+  --fam-audio: #f59e0b;
+  --fam-pdf: #ef4444;
+  --fam-archive: #f97316;
+  --fam-code: #3b82f6;
+  --fam-data: #10b981;
 
   --sans: ui-sans-serif, system-ui, -apple-system, "Segoe UI Variable Display",
     "Segoe UI", Inter, Roboto, "Helvetica Neue", Arial, sans-serif;
@@ -44,7 +99,6 @@
   --fs-base: 13px;
   --fs-md: 14px;
   --fs-lg: 15px;
-  --fs-xl: 19px;
 
   --r-xs: 5px;
   --r-sm: 7px;
@@ -53,9 +107,12 @@
   --r-full: 999px;
 
   --row: 27px;
-  --indent: 15px;
   --topbar-h: 52px;
   --sidebar-w: 288px;
+
+  /* Notched and home-indicator phones; zero everywhere else. */
+  --safe-top: env(safe-area-inset-top, 0px);
+  --safe-bottom: env(safe-area-inset-bottom, 0px);
 
   /* One easing curve for everything, so motion feels like one system. */
   --ease: cubic-bezier(0.32, 0.72, 0, 1);
@@ -63,31 +120,57 @@
   --base: 200ms;
 }
 
+/* System-following dark, but only while no explicit choice is pinned:
+   the attribute selectors below stop matching once app.js sets one. */
 @media (prefers-color-scheme: dark) {
-  :root {
-    --accent: #45c4b2;
-    --accent-hover: #5ad4c2;
-    --accent-ink: #04211d;
-    --accent-wash: rgba(69, 196, 178, 0.13);
-    --accent-wash-2: rgba(69, 196, 178, 0.2);
-    --accent-ring: rgba(69, 196, 178, 0.4);
-
-    --bg: #0c0e11;
-    --surface: #14171b;
-    --surface-2: #101317;
-    --surface-3: #1a1e23;
-    --sidebar: #0f1215;
-    --border: rgba(255, 255, 255, 0.08);
-    --border-strong: rgba(255, 255, 255, 0.16);
-    --text: #e8ebef;
-    --dim: #a0a7b2;
-    --faint: #8d95a1;
-    --code-bg: #0f1216;
-
-    --shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.4);
-    --shadow-md: 0 2px 4px rgba(0, 0, 0, 0.3), 0 8px 24px -10px rgba(0, 0, 0, 0.6);
-    --shadow-lg: 0 4px 8px rgba(0, 0, 0, 0.35), 0 24px 56px -20px rgba(0, 0, 0, 0.7);
+  :root:not([data-theme]) {
+    --accent: var(--d-accent);
+    --accent-ink: var(--d-accent-ink);
+    --accent-wash: var(--d-accent-wash);
+    --accent-wash-2: var(--d-accent-wash-2);
+    --bg: var(--d-bg);
+    --surface: var(--d-surface);
+    --surface-2: var(--d-surface-2);
+    --surface-3: var(--d-surface-3);
+    --sidebar: var(--d-sidebar);
+    --border: var(--d-border);
+    --border-strong: var(--d-border-strong);
+    --text: var(--d-text);
+    --dim: var(--d-dim);
+    --faint: var(--d-faint);
+    --code-bg: var(--d-code-bg);
+    --hover: var(--d-hover);
+    --scrim: var(--d-scrim);
+    --shadow-sm: var(--d-shadow-sm);
+    --shadow-md: var(--d-shadow-md);
+    --shadow-lg: var(--d-shadow-lg);
   }
+}
+
+/* An explicit choice wins over the system. Forcing "light" needs no rule:
+   with an attribute present the media block above is skipped and the light
+   mapping in :root applies again. */
+:root[data-theme="dark"] {
+  --accent: var(--d-accent);
+  --accent-ink: var(--d-accent-ink);
+  --accent-wash: var(--d-accent-wash);
+  --accent-wash-2: var(--d-accent-wash-2);
+  --bg: var(--d-bg);
+  --surface: var(--d-surface);
+  --surface-2: var(--d-surface-2);
+  --surface-3: var(--d-surface-3);
+  --sidebar: var(--d-sidebar);
+  --border: var(--d-border);
+  --border-strong: var(--d-border-strong);
+  --text: var(--d-text);
+  --dim: var(--d-dim);
+  --faint: var(--d-faint);
+  --code-bg: var(--d-code-bg);
+  --hover: var(--d-hover);
+  --scrim: var(--d-scrim);
+  --shadow-sm: var(--d-shadow-sm);
+  --shadow-md: var(--d-shadow-md);
+  --shadow-lg: var(--d-shadow-lg);
 }
 
 * { box-sizing: border-box; }
@@ -137,8 +220,8 @@ button { font: inherit; color: inherit; }
   display: flex;
   align-items: center;
   gap: 12px;
-  height: var(--topbar-h);
-  padding: 0 14px 0 16px;
+  height: calc(var(--topbar-h) + var(--safe-top));
+  padding: var(--safe-top) 12px 0 16px;
   background: color-mix(in srgb, var(--surface) 82%, transparent);
   backdrop-filter: saturate(1.6) blur(14px);
   border-bottom: 1px solid var(--border);
@@ -217,6 +300,39 @@ button { font: inherit; color: inherit; }
 
 .root svg { width: 12px; height: 12px; flex: none; opacity: 0.65; }
 
+/* The theme toggle. It has no job until app.js pins a data-theme attribute,
+   so a no-JS page simply does not ship a control that cannot work. */
+.tbtn { display: none; }
+
+html[data-theme] .tbtn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex: none;
+  width: 30px;
+  height: 30px;
+  padding: 0;
+  border-radius: var(--r-sm);
+  border: 1px solid var(--border);
+  background: var(--surface-2);
+  color: var(--dim);
+  cursor: pointer;
+  box-shadow: var(--shadow-sm);
+  transition: background var(--fast) var(--ease), color var(--fast) var(--ease),
+    border-color var(--fast) var(--ease);
+}
+
+html[data-theme] .tbtn:hover {
+  background: var(--surface-3);
+  color: var(--text);
+  border-color: var(--border-strong);
+}
+
+.tbtn svg { width: 14px; height: 14px; }
+.tbtn .sun { display: none; }
+html[data-theme="dark"] .tbtn .sun { display: block; }
+html[data-theme="dark"] .tbtn .moon { display: none; }
+
 .body {
   display: grid;
   grid-template-columns: var(--sidebar-w) minmax(0, 1fr);
@@ -284,6 +400,26 @@ button { font: inherit; color: inherit; }
   flex: none;
 }
 
+/* The clear affordance for touch screens, where there is no Escape key. */
+.filter-clear {
+  display: grid;
+  place-items: center;
+  flex: none;
+  width: 18px;
+  height: 18px;
+  padding: 0;
+  border: 0;
+  border-radius: var(--r-full);
+  background: none;
+  color: var(--faint);
+  cursor: pointer;
+  transition: background var(--fast) var(--ease), color var(--fast) var(--ease);
+}
+
+.filter-clear svg { width: 12px; height: 12px; }
+.filter-clear:hover { background: var(--surface-3); color: var(--text); }
+.filter-clear[hidden] { display: none; }
+
 /* Thin, unobtrusive scrollbars that only assert themselves on hover. */
 .tree, .pane {
   scrollbar-width: thin;
@@ -291,11 +427,9 @@ button { font: inherit; color: inherit; }
   transition: scrollbar-color var(--base) var(--ease);
 }
 
-.tree:hover, .pane:hover { scrollbar-color: var(--border-strong) transparent; }
-
 .tree {
   overflow: auto;
-  padding: 8px 8px 32px;
+  padding: 8px 8px calc(24px + var(--safe-bottom));
 }
 
 .tree::-webkit-scrollbar { width: 11px; }
@@ -306,8 +440,6 @@ button { font: inherit; color: inherit; }
   border-radius: var(--r-full);
   transition: background var(--base) var(--ease);
 }
-.tree:hover::-webkit-scrollbar-thumb { background-color: var(--border-strong); }
-.tree::-webkit-scrollbar-thumb:hover { background-color: var(--dim); }
 
 /* ── tree rows ───────────────────────────────────────────────────────── */
 
@@ -325,12 +457,6 @@ button { font: inherit; color: inherit; }
   position: relative;
   color: var(--text);
   transition: background var(--fast) var(--ease), color var(--fast) var(--ease);
-}
-
-.row:hover { background: var(--hover, rgba(16, 20, 28, 0.045)); }
-
-@media (prefers-color-scheme: dark) {
-  .row:hover { background: rgba(255, 255, 255, 0.045); }
 }
 
 .row.selected {
@@ -360,13 +486,20 @@ button { font: inherit; color: inherit; }
 
 .row .twist.hide { visibility: hidden; }
 .row.open > .twist { transform: rotate(90deg); }
-.row:hover .twist { color: var(--dim); }
 
 .row .ico { flex: none; width: 15px; height: 15px; color: var(--faint); }
-.row.dir .ico { color: var(--accent); }
-.row.selected .ico { color: var(--accent); }
-/* Open folders read as filled, closed ones as outlines. */
-.row.dir .ico svg { opacity: 0.9; }
+.row.dir .ico, .row.selected .ico { color: var(--accent); }
+
+/* Family tints, kept after the selected/accent rules so a selected file keeps
+   its own colour: one fixed hue per kind, pulled toward the text colour so it
+   settles into whichever palette is active. */
+.row .ico.fam-image { color: color-mix(in srgb, var(--fam-image) 62%, var(--text)); }
+.row .ico.fam-video { color: color-mix(in srgb, var(--fam-video) 62%, var(--text)); }
+.row .ico.fam-audio { color: color-mix(in srgb, var(--fam-audio) 62%, var(--text)); }
+.row .ico.fam-pdf   { color: color-mix(in srgb, var(--fam-pdf) 62%, var(--text)); }
+.row .ico.fam-archive { color: color-mix(in srgb, var(--fam-archive) 62%, var(--text)); }
+.row .ico.fam-code  { color: color-mix(in srgb, var(--fam-code) 62%, var(--text)); }
+.row .ico.fam-data  { color: color-mix(in srgb, var(--fam-data) 62%, var(--text)); }
 
 .row .name {
   flex: 1;
@@ -388,7 +521,7 @@ button { font: inherit; color: inherit; }
   transition: opacity var(--base) var(--ease);
 }
 
-.row:hover .size, .row.selected .size { opacity: 1; }
+.row.selected .size { opacity: 1; }
 
 .row[hidden] { display: none; }
 
@@ -399,8 +532,6 @@ button { font: inherit; color: inherit; }
   font-style: normal;
 }
 
-.row.note:hover { background: none; }
-
 /* Indentation guides: one hairline per level, behind the row. */
 .row .rail {
   position: absolute;
@@ -410,19 +541,19 @@ button { font: inherit; color: inherit; }
   pointer-events: none;
   z-index: 0;
 }
-@media (prefers-reduced-motion: reduce) {
-  * { transition-duration: 0.01ms !important; animation-duration: 0.01ms !important; }
-  * { scroll-behavior: auto !important; }
-}
 
 /* ── main pane ───────────────────────────────────────────────────────── */
 
 .main {
   display: grid;
+  /* Same trap as .app: without an explicit column, an auto column would size
+     to the widest row's min-content and let an unbreakable breadcrumb or a
+     long filename widen the whole page on a phone. */
+  grid-template-columns: minmax(0, 1fr);
   grid-template-rows: auto 1fr;
   min-width: 0;
   min-height: 0;
-  background: var(--surface);
+  background: var(--bg);
   position: relative;
 }
 
@@ -433,30 +564,42 @@ button { font: inherit; color: inherit; }
   min-height: 58px;
   padding: 11px 16px;
   border-bottom: 1px solid var(--border);
-  background: color-mix(in srgb, var(--surface) 70%, transparent);
+  background: color-mix(in srgb, var(--surface) 72%, transparent);
   backdrop-filter: blur(10px);
   position: relative;
   z-index: 2;
 }
 
+/* display:flex would beat the UA's [hidden] rule, so the attribute needs
+   this explicit rule to actually hide the header before the first selection. */
+.head[hidden] { display: none; }
+
 .head .who { min-width: 0; flex: 1; }
 
 /* The breadcrumb: each segment is a hit target, and the path reads as one
-   continuous string first and a set of links second. */
+   continuous string first and a set of links second. fit-content keeps the
+   box left-aligned while it fits; once it cannot fit, flex-end pushes the
+   overflow out the start edge, where overflow-hidden clips it — so a long
+   path loses its oldest segments and always keeps the one you are in. */
 .crumb {
   display: flex;
   align-items: center;
+  justify-content: flex-end;
   gap: 5px;
+  width: fit-content;
+  max-width: 100%;
   font: var(--fs-md)/1.35 var(--mono);
   color: var(--text);
   overflow: hidden;
   white-space: nowrap;
-  direction: rtl;
-  text-align: left;
   min-height: 20px;
 }
 
 .crumb b { font-weight: 600; }
+.crumb.clipped {
+  mask-image: linear-gradient(to right, transparent, #000 16px);
+  -webkit-mask-image: linear-gradient(to right, transparent, #000 16px);
+}
 .crumb .sep { color: var(--faint); flex: none; }
 .crumb .root-crumb { color: var(--dim); flex: none; }
 .crumb span[data-link] {
@@ -466,18 +609,20 @@ button { font: inherit; color: inherit; }
   margin: 0 -4px;
   transition: background var(--fast) var(--ease), color var(--fast) var(--ease);
 }
-.crumb span[data-link]:hover { background: var(--surface-3); color: var(--accent); }
 
 .meta {
   margin-top: 3px;
   font-size: var(--fs-sm);
   color: var(--faint);
   display: flex;
-  gap: 7px;
+  flex-wrap: wrap;
+  gap: 3px 7px;
   align-items: center;
   min-height: 17px;
 }
 
+/* Each fact wraps as a whole ("49 KB" never breaks mid-pair). */
+.meta > span { white-space: nowrap; }
 .meta .dot { opacity: 0.55; }
 .meta .kind {
   font-family: var(--mono);
@@ -499,7 +644,7 @@ button { font: inherit; color: inherit; }
   padding: 0 11px;
   border-radius: var(--r-sm);
   border: 1px solid var(--border);
-  background: var(--surface-2);
+  background: var(--surface);
   color: var(--dim);
   font-size: var(--fs-sm);
   font-weight: 500;
@@ -512,11 +657,6 @@ button { font: inherit; color: inherit; }
     border-color var(--fast) var(--ease), transform var(--fast) var(--ease);
 }
 
-.btn:hover {
-  background: var(--surface-3);
-  color: var(--text);
-  border-color: var(--border-strong);
-}
 .btn:active { transform: translateY(0.5px); }
 .btn svg { width: 13px; height: 13px; flex: none; }
 
@@ -525,6 +665,7 @@ button { font: inherit; color: inherit; }
   border-color: var(--accent);
   background: var(--accent-wash);
 }
+
 /* The tree only becomes a drawer below 760px, so the trigger and the
    slide-back chevron have no job on a wide screen and stay hidden. */
 .drawer-btn { display: none; }
@@ -532,7 +673,6 @@ button { font: inherit; color: inherit; }
 /* The scrim is created by the markup but only ever shown by app.js on a
    phone; [hidden] keeps it out of the desktop layer entirely. */
 .scrim { display: none; }
-
 
 /* ── preview surfaces ────────────────────────────────────────────────── */
 
@@ -549,8 +689,23 @@ button { font: inherit; color: inherit; }
   border-radius: var(--r-full);
   transition: background var(--base) var(--ease);
 }
-.pane:hover::-webkit-scrollbar-thumb { background-color: var(--border-strong); }
-.pane::-webkit-scrollbar-thumb:hover { background-color: var(--dim); }
+
+/* One wrapper per navigation. As a flex column it hands every child a
+   definite height to grow into, which is what lets a three-line file's
+   background still cover the pane; it also carries the navigation motion. */
+.view {
+  min-height: 100%;
+  display: flex;
+  flex-direction: column;
+  animation: view-in 180ms var(--ease);
+}
+
+@keyframes view-in {
+  from { opacity: 0; transform: translateY(3px); }
+  to { opacity: 1; transform: none; }
+}
+
+.view > pre.code, .view > .media, .view > .blank { flex: 1 0 auto; }
 
 /* Code: line numbers from a CSS counter, so they track scroll and selection
    perfectly and cost no DOM. */
@@ -563,7 +718,6 @@ pre.code {
   tab-size: 2;
   color: var(--text);
   background: var(--code-bg);
-  min-height: 100%;
 }
 
 pre.code .l {
@@ -588,13 +742,10 @@ pre.code .l::before {
   user-select: none;
 }
 
-pre.code .l:hover { background: color-mix(in srgb, var(--accent) 4%, transparent); }
-
 /* Media sits on a subtle checker so transparent images read correctly. */
 .media {
   display: grid;
   place-items: center;
-  min-height: 100%;
   padding: 32px;
   background-image:
     linear-gradient(45deg, var(--code-bg) 25%, transparent 25%),
@@ -634,7 +785,6 @@ pre.code .l:hover { background: color-mix(in srgb, var(--accent) 4%, transparent
   place-content: center;
   justify-items: center;
   gap: 8px;
-  height: 100%;
   min-height: 320px;
   padding: 40px;
   text-align: center;
@@ -644,16 +794,16 @@ pre.code .l:hover { background: color-mix(in srgb, var(--accent) 4%, transparent
 .blank .glyph {
   display: grid;
   place-items: center;
-  width: 52px;
-  height: 52px;
+  width: 56px;
+  height: 56px;
   margin-bottom: 6px;
-  border-radius: var(--r-lg);
-  border: 1px solid var(--border);
-  background: var(--surface-2);
-  color: var(--dim);
-  box-shadow: var(--shadow-sm);
+  border-radius: 16px;
+  background: linear-gradient(150deg, var(--accent), color-mix(in srgb, var(--accent) 72%, var(--accent-ink)));
+  color: var(--accent-ink);
+  box-shadow: var(--shadow-md), inset 0 1px 0 rgba(255, 255, 255, 0.22);
 }
-.blank .glyph svg { width: 22px; height: 22px; }
+
+.blank .glyph svg { width: 24px; height: 24px; }
 
 .blank h2 {
   margin: 0;
@@ -673,6 +823,34 @@ pre.code .l:hover { background: color-mix(in srgb, var(--accent) 4%, transparent
 
 .blank p.hint { padding: 0 20px 28px; }
 
+/* The welcome state's curl one-liner is a button: tapping it copies it. */
+.curlchip {
+  margin: 4px 0 0;
+  padding: 8px 14px;
+  border-radius: var(--r-sm);
+  border: 1px solid var(--border);
+  background: var(--code-bg);
+  cursor: pointer;
+  max-width: min(92%, 560px);
+  box-shadow: var(--shadow-sm);
+  transition: border-color var(--fast) var(--ease), transform var(--fast) var(--ease),
+    background var(--fast) var(--ease);
+}
+
+.curlchip code {
+  display: block;
+  font: var(--fs-sm) var(--mono);
+  color: var(--dim);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.curlchip:hover { border-color: var(--accent); }
+.curlchip:active { transform: scale(0.985); }
+.curlchip.done { border-color: var(--accent); background: var(--accent-wash); }
+.curlchip.done code { color: var(--accent); }
+
 .blank code, .hint code {
   counter-reset: none;
   display: inline;
@@ -687,30 +865,58 @@ pre.code .l:hover { background: color-mix(in srgb, var(--accent) 4%, transparent
 
 /* ── directory pane ──────────────────────────────────────────────────── */
 
-.dirlist { padding: 8px 0 24px; }
+/* The listing is a card on the canvas rather than rows bleeding to the
+   edges: it gives the pane the same quiet containment as the chrome. */
+.dirlist {
+  flex: 0 0 auto;
+  margin: 12px 16px 24px;
+  padding: 2px 0 6px;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--r-lg);
+  box-shadow: var(--shadow-sm);
+  overflow: hidden;
+}
 
 .dirlist .row {
-  height: 31px;
-  padding: 0 16px;
+  height: 34px;
+  padding: 0 14px;
   cursor: pointer;
-  gap: 8px;
+  gap: 9px;
   border-radius: 0;
 }
 
-.dirlist .row:hover { background: var(--surface-2); }
-.dirlist .row + .row { border-top: 1px solid transparent; }
 .dirlist .row .name { font-size: var(--fs-md); }
 .dirlist .row .size { opacity: 1; }
-.dirlist .row .go { color: var(--faint); width: 14px; height: 14px; opacity: 0; transition: opacity var(--fast) var(--ease), transform var(--fast) var(--ease); transform: translateX(-3px); }
-.dirlist .row:hover .go { opacity: 1; transform: translateX(0); }
 .dirlist .row .ico { width: 16px; height: 16px; }
+
+.dirlist .row .go {
+  /* A hover affordance: on touch there is no hover, so it never appears. */
+  display: none;
+  color: var(--faint);
+  width: 14px;
+  height: 14px;
+  opacity: 0;
+  transition: opacity var(--fast) var(--ease), transform var(--fast) var(--ease);
+  transform: translateX(-3px);
+}
+
+.dirlabel {
+  padding: 10px 14px 5px;
+  font-size: var(--fs-xs);
+  font-weight: 600;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--faint);
+}
+
+.dirlist .row.note { padding: 4px 14px 2px; }
 
 /* ── no-JS fallback ──────────────────────────────────────────────────── */
 
 .noscript { padding: 10px 12px; }
 .noscript .up { margin: 0 0 10px; font-size: var(--fs-sm); }
 .noscript .up a { color: var(--accent); text-decoration: none; }
-.noscript .up a:hover { text-decoration: underline; }
 .noscript ul.plain { list-style: none; margin: 0; padding: 0; }
 .noscript ul.plain li {
   display: flex;
@@ -721,9 +927,6 @@ pre.code .l:hover { background: color-mix(in srgb, var(--accent) 4%, transparent
   font-family: var(--mono);
   font-size: var(--fs-sm);
 }
-.noscript ul.plain li:hover { background: var(--surface-2); }
-.noscript ul.plain a { color: var(--accent); text-decoration: none; overflow-wrap: anywhere; }
-.noscript ul.plain a:hover { text-decoration: underline; }
 .noscript ul.plain .num { color: var(--faint); font-size: var(--fs-xs); margin-left: auto; }
 .noscript .hint { color: var(--faint); font-size: var(--fs-sm); }
 
@@ -751,6 +954,43 @@ pre.code .l:hover { background: color-mix(in srgb, var(--accent) 4%, transparent
   text-align: center;
 }
 
+/* ── hover states ────────────────────────────────────────────────────── */
+/* Gated behind hover-capable pointers so a touch screen never gets a hover
+   state stuck to the row it just tapped. */
+
+@media (hover: hover) {
+  .row:hover { background: var(--hover); }
+  .row:hover .twist { color: var(--dim); }
+  .row:hover .size { opacity: 1; }
+  .tree:hover, .pane:hover { scrollbar-color: var(--border-strong) transparent; }
+  .tree:hover::-webkit-scrollbar-thumb { background-color: var(--border-strong); }
+  .tree::-webkit-scrollbar-thumb:hover { background-color: var(--dim); }
+  .pane:hover::-webkit-scrollbar-thumb { background-color: var(--border-strong); }
+  .pane::-webkit-scrollbar-thumb:hover { background-color: var(--dim); }
+
+  .dirlist .row:hover { background: var(--surface-2); }
+  .dirlist .row:hover .go { display: block; opacity: 1; transform: translateX(0); }
+
+  .crumb span[data-link]:hover { background: var(--surface-3); color: var(--accent); }
+
+  .root:hover { border-color: var(--border-strong); background: var(--surface-3); }
+  html[data-theme] .tbtn:hover {
+    background: var(--surface-3);
+    color: var(--text);
+    border-color: var(--border-strong);
+  }
+  .btn:hover {
+    background: var(--surface-3);
+    color: var(--text);
+    border-color: var(--border-strong);
+  }
+  .filter-clear:hover { background: var(--surface-3); color: var(--text); }
+  .curlchip:hover { border-color: var(--accent); }
+
+  pre.code .l:hover { background: color-mix(in srgb, var(--accent) 4%, transparent); }
+  .noscript ul.plain li:hover { background: var(--surface-2); }
+}
+
 /* ── phone ────────────────────────────────────────────────────────────── */
 /* Below the breakpoint the tree cannot afford a column: a 288px sidebar
    leaves the preview a sliver, so the two-column grid collapses to one and
@@ -764,11 +1004,13 @@ pre.code .l:hover { background: color-mix(in srgb, var(--accent) 4%, transparent
   }
   .sidebar {
     position: fixed;
-    inset: var(--topbar-h) auto 0 0;
+    inset: calc(var(--topbar-h) + var(--safe-top)) auto 0 0;
     z-index: 5;
     width: min(84vw, 340px);
     border-right: 0;
+    border-radius: 0 var(--r-lg) var(--r-lg) 0;
     box-shadow: var(--shadow-lg);
+    padding-bottom: var(--safe-bottom);
     transform: translateX(-100%);
     visibility: hidden;
     /* visibility flips with the slide so the panel is not a tab stop while
@@ -783,9 +1025,9 @@ pre.code .l:hover { background: color-mix(in srgb, var(--accent) 4%, transparent
      the opacity carries the fade so the pane is not blocked when closed. */
   .scrim {
     position: fixed;
-    inset: var(--topbar-h) 0 0 0;
+    inset: calc(var(--topbar-h) + var(--safe-top)) 0 0 0;
     z-index: 4;
-    background: rgba(8, 10, 14, 0.42);
+    background: var(--scrim);
     opacity: 0;
     pointer-events: none;
     transition: opacity var(--base) var(--ease);
@@ -822,17 +1064,29 @@ pre.code .l:hover { background: color-mix(in srgb, var(--accent) 4%, transparent
     height: 40px;
     padding: 0;
   }
+  .tbtn { width: 40px; height: 40px; }
   /* A pointer is a few millimetres tall; a thumb is not, so the hit areas
      grow rather than the type getting bigger. */
   .row { height: 40px; }
   .dirlist .row { height: 44px; }
   .btn { height: 40px; }
   .filter { height: 40px; }
+  .filter kbd { display: none; }
+  /* The header restacks: path and facts on top, the three actions spread
+     across the full width below them, sized like a native toolbar. */
   .head {
     flex-wrap: wrap;
     min-height: 0;
     gap: 8px;
-    padding: 8px 12px;
+    padding: 10px 12px;
+  }
+  .head .who { flex: 1 1 100%; }
+  .actions { flex: 1 1 100%; }
+  .actions .btn {
+    flex: 1 1 0;
+    justify-content: center;
+    min-width: 0;
+    padding: 0 8px;
   }
   .crumb { font-size: var(--fs-sm); }
   /* Below ~380px the brand word, the read-only badge and the served path no
@@ -843,6 +1097,7 @@ pre.code .l:hover { background: color-mix(in srgb, var(--accent) 4%, transparent
      identifies the directory. */
   .readonly { display: none; }
   .brand span:last-child { display: none; }
+  .topbar { gap: 8px; padding-right: 10px; }
   .root {
     /* The pill takes whatever is left over rather than a share of it, so a
        long served path can never widen the row on a narrow screen. */
@@ -850,6 +1105,7 @@ pre.code .l:hover { background: color-mix(in srgb, var(--accent) 4%, transparent
     max-width: none;
   }
   .pane { -webkit-overflow-scrolling: touch; }
+  .view { padding-bottom: var(--safe-bottom); }
   /* The line-number gutter costs a quarter of a 360px screen, so it shrinks
      to what still reads as a column. */
   pre.code { font-size: var(--fs-xs); }
@@ -861,4 +1117,10 @@ pre.code .l:hover { background: color-mix(in srgb, var(--accent) 4%, transparent
   .media { padding: 12px; }
   .media img, .media video { max-height: 52dvh; }
   .media embed { height: 52dvh; }
+  .dirlist { margin: 10px 12px 16px; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  * { transition-duration: 0.01ms !important; animation-duration: 0.01ms !important; }
+  * { scroll-behavior: auto !important; }
 }
