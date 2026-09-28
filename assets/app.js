@@ -92,6 +92,11 @@ const enc = (p) => p.split("/").filter(Boolean).map(encodeURIComponent).join("/"
 const urlOf = (p) => "/" + enc(p);
 const absUrl = (p) => location.origin + urlOf(p);
 const nameOf = (p) => p.split("/").pop();
+// The parent of a root-relative path; the root's parent is the root itself.
+const parentOf = (p) => {
+  const i = p.lastIndexOf("/");
+  return i < 0 ? "" : p.slice(0, i);
+};
 
 // With token auth on, every URL the UI links to needs the token or Raw/Download
 // would 401 against a fresh request.
@@ -347,6 +352,9 @@ async function show(path, replace) {
     ui.root.dataset.touched = "1";
     ui.head.hidden = false;
   }
+  // The up chevron only means something once there is a selection; on the
+  // untouched root it would advertise a level above the top.
+  ui.back.hidden = path === "";
   ui.pane.scrollTop = 0;
   // A tap on a row inside the drawer navigates, and the preview is what the
   // user came for, so the drawer closes and the pane reclaims the screen.
@@ -727,11 +735,20 @@ function setDrawer(open, force) {
 ui.drawer.addEventListener("click", () =>
   setDrawer(document.documentElement.dataset.drawer !== "open"));
 ui.scrim.addEventListener("click", () => setDrawer(false));
-ui.back.addEventListener("click", () => setDrawer(false));
-// Tapping a row navigates, and a phone has no room for the tree and the
-// preview at once, so the drawer gets out of the way once the row is handled.
+// The up chevron navigates to the parent directory — the same move the
+// breadcrumb's ancestors offer, one tap from the topbar. show() then closes
+// the drawer for us on a phone, so this button needs no drawer logic of its
+// own; a second close-the-drawer button read as broken whenever the drawer
+// was already closed, which is the state it sits in most of the time.
+ui.back.addEventListener("click", () => {
+  if (selected) show(parentOf(selected));
+});
+// Tapping a file navigates, and the preview is what the user came for, so the
+// drawer closes at once — show() would close it too, but only after the fetch.
+// Tapping a directory only folds or unfolds it; closing there made the tree
+// unusable for browsing, one press per directory.
 ui.tree.addEventListener("click", (e) => {
-  if (e.target.closest(".row.dir, .row.file")) setDrawer(false);
+  if (e.target.closest(".row.file")) setDrawer(false);
 });
 // ------------------------------------------------------------- theme ----
 // Light and dark are two token palettes in the CSS; which one applies is a

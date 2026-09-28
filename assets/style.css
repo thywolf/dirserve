@@ -670,6 +670,9 @@ html[data-theme="dark"] .tbtn .moon { display: none; }
    slide-back chevron have no job on a wide screen and stay hidden. */
 .drawer-btn { display: none; }
 .icon-only { display: none; padding: 0; }
+/* display:inline-flex below would beat the UA's [hidden] rule; the up chevron
+   is hidden by app.js whenever there is no selection to go up from. */
+.icon-only[hidden] { display: none; }
 /* The scrim is created by the markup but only ever shown by app.js on a
    phone; [hidden] keeps it out of the desktop layer entirely. */
 .scrim { display: none; }

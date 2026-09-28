@@ -77,10 +77,14 @@ whole HTTP contract stayed green. Layout changes need a real viewport check.
   collapses to one column and the tree becomes a fixed slide-over keyed off
   `documentElement.dataset.drawer`, which `setDrawer()` in `app.js` owns. CSS
   only reacts to that attribute; do not add a second source of truth. The
-  trigger and the back chevron both live in `.topbar` *on purpose*: the scrim
-  covers everything below it, so a control in `.head` cannot be tapped while
-  the drawer is open. Putting one back down there needs a `z-index` patch and
-  will be hit-tested as unreachable.
+  drawer trigger and the up chevron both live in `.topbar` *on purpose*: the
+  scrim covers everything below it, so a control in `.head` cannot be tapped
+  while the drawer is open. Putting one back down there needs a `z-index`
+  patch and will be hit-tested as unreachable. The chevron navigates up one
+  level (`show()` closes the drawer on navigation); a topbar button whose only
+  job was closing the drawer read as broken whenever the drawer was closed,
+  and the tree closed itself on every tap — including directory folds — until
+  the close was narrowed to file taps.
 - **Grid columns here are `minmax(0, 1fr)`, never `auto` or bare `1fr`.** An
   auto column sizes to its widest row's min-content, so one long filename in
   the topbar or the pane widens the whole document and the page pans sideways
