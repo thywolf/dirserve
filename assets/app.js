@@ -20,8 +20,13 @@ const ui = {
 };
 
 // The server renders --max-preview-bytes into the shell; anything larger is
-// offered as a download rather than pulled into the browser.
-const MAX_PREVIEW = Number(document.body.dataset.maxPreview) || 1048576;
+// offered as a download rather than pulled into the browser. Zero is a real
+// answer ("no inline previews"), so only a missing or malformed attribute
+// falls back to the default.
+const MAX_PREVIEW = (() => {
+  const n = Number(document.body.dataset.maxPreview);
+  return Number.isFinite(n) && n >= 0 ? n : 1048576;
+})();
 
 // The phone breakpoint, declared with the other module constants rather than
 // beside the drawer code: show() reads it during the initial load, which runs
@@ -304,9 +309,22 @@ async function reveal(path) {
 
 // -------------------------------------------------------------- preview ----
 
+// A hash segment that is not valid percent-encoding ("%zz") would make
+// decodeURIComponent throw and, before any error handler could run, take the
+// whole UI down with it: hashPath runs at module level and inside the URL
+// change handlers. Decode what decodes and leave the rest literal — such a
+// segment simply matches no file, which is what a malformed link deserves.
+const decodeSeg = (seg) => {
+  try {
+    return decodeURIComponent(seg);
+  } catch {
+    return seg;
+  }
+};
+
 const hashPath = () =>
   location.hash.replace(/^#/, "").replace(/^\//, "")
-    .split("/").filter(Boolean).map(decodeURIComponent).join("/");
+    .split("/").filter(Boolean).map(decodeSeg).join("/");
 
 function setHash(path, replace) {
   const next = "#" + urlOf(path);

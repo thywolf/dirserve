@@ -74,6 +74,13 @@ jobs:
       - name: Unit and integration tests
         run: go test -race -covermode=atomic -coverprofile=coverage.out ./...
 
+      # Stdlib-only does not mean CVE-immune: scan the standard library symbols
+      # the binary actually calls against the Go vulnerability database. Runs
+      # once, on the stable leg; the pinned 1.25 leg already gates the build.
+      - name: govulncheck
+        if: matrix.go == 'stable'
+        run: go run golang.org/x/vuln/cmd/govulncheck@latest ./...
+
       - name: Test coverage
         run: |
           go tool cover -func=coverage.out | tail -1

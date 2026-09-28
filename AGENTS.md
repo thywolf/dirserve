@@ -95,6 +95,14 @@ whole HTTP contract stayed green. Layout changes need a real viewport check.
   `documentElement.dataset.theme` (owned by the theme block in `app.js`,
   persisted in localStorage) pins an explicit choice. Do not fork palette
   values into component rules, and do not add a third source of truth.
+- **The asset-shadowing property is load-bearing.** A user file named
+  `app.js` or `style.css` in the served tree shadows the embedded copy — that
+  is the no-reserved-paths rule, and it is pinned by an e2e assertion. It is
+  safe only because `fsx.ContentType` types `.js` and `.css` as `text/plain`
+  and every file response carries `nosniff`, so a browser refuses to execute
+  or apply the shadowed file. If the content-type policy ever starts serving
+  `.js` as `text/javascript`, shadowing becomes attacker-controlled script in
+  the UI's origin. Check with the e2e suite before "fixing" those types.
 - **Everything from the filesystem reaches the DOM via `textContent`.** A
   filename is attacker-controlled. The only `innerHTML` calls in `app.js` write
   icon strings defined in that same file.
@@ -128,10 +136,31 @@ whole HTTP contract stayed green. Layout changes need a real viewport check.
 - Table-driven for validation, content types and negotiation.
 - Test the *contract*, not the implementation. A test that asserts a function
   was called, or that a string contains another string, catches nothing.
+- `FuzzDecodePath` pins the security invariants of the path parser. The seed
+  corpus runs with the normal suite; the fuzzer runs on demand:
+  `go test ./internal/fsx -run '^$' -fuzz FuzzDecodePath -fuzztime 60s`.
+  Run it before committing changes to `path.go` or anything that feeds
+  `os.Root`.
 - The symlink tests **skip on Windows** (no privileges to create symlinks).
-  They only really run on Linux. If you touch path confinement, verify on Linux
-  or via `GOOS=linux go test -c` executed under WSL — a Windows-only green run
-  proves nothing about symlink behaviour.
+  They only really run on Linux. If you touch path confinement, verify under
+  WSL — a Windows-only green run proves nothing about symlink behaviour. The
+  recipe that works from Git Bash (no Go inside WSL; cross-compile, then run
+  the Linux binaries there; `MSYS_NO_PATHCONV=1` stops Git Bash rewriting
+  `/mnt/...` paths before wsl.exe sees them):
+
+  ```sh
+  GOOS=linux GOARCH=amd64 go test -c -o /tmp/wsl-fsx.test ./internal/fsx
+  GOOS=linux GOARCH=amd64 go test -c -o /tmp/wsl-server.test ./internal/server
+  wsl /mnt/c/<tmp>/wsl-fsx.test -test.run 'Symlink' -test.v
+
+  # The full acceptance gate on Linux, including its symlink assertions:
+  GOOS=linux GOARCH=amd64 CGO_ENABLED=0 go build -trimpath -o ./dirserve ./cmd/dirserve
+  MSYS_NO_PATHCONV=1 wsl sh -c 'cd /mnt/c/<repo> && sh e2e.sh'
+  rm ./dirserve
+  ```
+
+  The e2e fixture is created by `mktemp -d` inside WSL (native ext4), so its
+  `ln -s` checks run for real there even though the repo sits on /mnt/c.
 - `TestConfineSymlinkEscape` documents a genuine `os.Root` quirk: an *absolute*
   symlink is refused even when it points inside the root, while a *relative*
   in-root symlink resolves. That is intentional, and the test pins both halves.

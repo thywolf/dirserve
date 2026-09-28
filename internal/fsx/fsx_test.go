@@ -74,6 +74,52 @@ func TestDecodePath(t *testing.T) {
 	}
 }
 
+// FuzzDecodePath pins the security invariants of the path parser for arbitrary
+// input: whatever DecodePath returns is either an error or a root-relative
+// path that cannot change structure on its way to os.Root. No separators
+// inside segments (the result is the whole path, so only the framing matters
+// here), no dot segments, no empty segments, no control characters, and the
+// result is never rooted. os.Root re-checks all of this at the syscall layer;
+// the parser refusing first is what keeps the filesystem entirely out of the
+// request path for garbage input.
+//
+// The seed corpus runs with the normal suite. The fuzzer itself runs on
+// demand: go test ./internal/fsx -run '^$' -fuzz FuzzDecodePath -fuzztime 60s
+func FuzzDecodePath(f *testing.F) {
+	for _, seed := range []string{
+		"/", "/setup.sh", "/configs/app.conf", "/a/../../etc/passwd",
+		"/..%2f..%2fetc%2fpasswd", "/%2e%2e/%2e%2e/etc", "/a//b", "/a/./b",
+		"/a%00b", "/a%0ab", "/a%2fb.txt", "/a%252fb.txt", "/%252e%252e",
+		"/..\\..\\..\\windows", "/a\\..\\..", "/%ff", "/a%zz", "/#?", "/%2f",
+		"/café/naïve.txt", "/🎉/%ff.txt", "/100%25.txt", "relative", "/-rf",
+		"/" + strings.Repeat("a/", 300),
+	} {
+		f.Add(seed)
+	}
+	f.Fuzz(func(t *testing.T, p string) {
+		got, err := DecodePath(p)
+		if err != nil {
+			return
+		}
+		if got == "" {
+			return // the root itself
+		}
+		if strings.HasPrefix(got, "/") || strings.HasSuffix(got, "/") || strings.Contains(got, "//") {
+			t.Fatalf("DecodePath(%q) = %q: structural separator", p, got)
+		}
+		for _, seg := range strings.Split(got, "/") {
+			if seg == "" || seg == "." || seg == ".." {
+				t.Fatalf("DecodePath(%q) = %q: unsafe segment %q", p, got, seg)
+			}
+			for _, r := range seg {
+				if r < 0x20 || r == 0x7f {
+					t.Fatalf("DecodePath(%q) = %q: control character in segment %q", p, got, seg)
+				}
+			}
+		}
+	})
+}
+
 func TestIsText(t *testing.T) {
 	tests := []struct {
 		name string
